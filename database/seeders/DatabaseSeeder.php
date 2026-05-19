@@ -22,7 +22,10 @@ class DatabaseSeeder extends Seeder
             'is_admin' => true,
         ]);
 
-        $this->call(WorkingDaysSeeder::class);
-        $this->call(TimeSlotsSeeder::class);
+        $this->call(WorkingDaySeeder::class);
+        $this->call(TimeBlockSeeder::class);
+        $this->call(PracticeSeeder::class);
+        $this->call(SkillDomainSeeder::class);
+        $this->call(LearningItemSeeder::class);
     }
 }

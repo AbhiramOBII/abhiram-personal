@@ -11,7 +11,7 @@ class AuthController extends Controller
     public function showLogin()
     {
         if (Auth::check() && Auth::user()->is_admin) {
-            return redirect()->route('admin.dashboard');
+            return redirect()->route('admin.dashboard.today');
         }
 
         return view('admin.auth.login');
@@ -33,7 +33,7 @@ class AuthController extends Controller
             }
 
             $request->session()->regenerate();
-            return redirect()->intended(route('admin.dashboard'));
+            return redirect()->intended(route('admin.dashboard.today'));
         }
 
         return back()->withErrors([
