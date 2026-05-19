@@ -136,4 +136,95 @@ class TaskController extends Controller
 
         return redirect()->back()->with('success', 'Template deleted.');
     }
+
+    public function sampleCsv()
+    {
+        $csv = "title,priority,pillar,estimated_minutes,date,time_block\n";
+        $csv .= "Write blog post about AI tools,must,content,45," . now()->format('Y-m-d') . ",\n";
+        $csv .= "Review analytics dashboard,should,marketing,20," . now()->format('Y-m-d') . ",\n";
+        $csv .= "Record podcast episode,must,podcast,60," . now()->addDay()->format('Y-m-d') . ",\n";
+        $csv .= "Gym session,should,health,45," . now()->format('Y-m-d') . ",\n";
+        $csv .= "Reply to partnership emails,bonus,networking,15," . now()->format('Y-m-d') . ",\n";
+
+        return response($csv)
+            ->header('Content-Type', 'text/csv')
+            ->header('Content-Disposition', 'attachment; filename="dayos-tasks-sample.csv"');
+    }
+
+    public function bulkUpload(Request $request)
+    {
+        $request->validate([
+            'csv_file' => 'required|file|mimes:csv,txt|max:512',
+        ]);
+
+        $file = $request->file('csv_file');
+        $rows = array_map('str_getcsv', file($file->getRealPath()));
+        $header = array_map('strtolower', array_map('trim', array_shift($rows)));
+
+        $requiredColumns = ['title'];
+        foreach ($requiredColumns as $col) {
+            if (!in_array($col, $header)) {
+                return redirect()->back()->with('error', "CSV must have a '{$col}' column.");
+            }
+        }
+
+        $timeBlockMap = TimeBlock::pluck('id', 'name')->mapWithKeys(fn($id, $name) => [strtolower($name) => $id]);
+        $validPriorities = ['must', 'should', 'bonus'];
+        $created = 0;
+        $errors = [];
+
+        foreach ($rows as $i => $row) {
+            if (count($row) < count($header)) {
+                $row = array_pad($row, count($header), '');
+            }
+            $data = array_combine($header, array_map('trim', $row));
+
+            if (empty($data['title'])) {
+                continue;
+            }
+
+            $date = !empty($data['date']) ? $data['date'] : now()->toDateString();
+            try {
+                $parsedDate = \Carbon\Carbon::parse($date)->toDateString();
+            } catch (\Exception $e) {
+                $errors[] = "Row " . ($i + 2) . ": Invalid date '{$date}'.";
+                continue;
+            }
+
+            $dayOfWeek = \Carbon\Carbon::parse($parsedDate)->dayOfWeek;
+            $workingDay = WorkingDay::where('day_number', $dayOfWeek)->first();
+
+            $plan = DailyPlan::firstOrCreate(
+                ['plan_date' => $parsedDate],
+                ['working_day_id' => $workingDay?->id]
+            );
+
+            $priority = !empty($data['priority']) && in_array(strtolower($data['priority']), $validPriorities)
+                ? strtolower($data['priority'])
+                : 'should';
+
+            $timeBlockId = null;
+            if (!empty($data['time_block'])) {
+                $timeBlockId = $timeBlockMap[strtolower($data['time_block'])] ?? null;
+            }
+
+            Task::create([
+                'daily_plan_id' => $plan->id,
+                'title' => $data['title'],
+                'priority' => $priority,
+                'pillar' => !empty($data['pillar']) ? strtolower($data['pillar']) : null,
+                'estimated_minutes' => !empty($data['estimated_minutes']) ? (int) $data['estimated_minutes'] : null,
+                'time_block_id' => $timeBlockId,
+                'sort_order' => 0,
+            ]);
+            $created++;
+        }
+
+        $message = "{$created} task(s) imported successfully.";
+        if (!empty($errors)) {
+            $message .= ' ' . count($errors) . ' row(s) skipped.';
+        }
+
+        return redirect()->back()->with('success', $message)->with('import_errors', $errors);
+    }
 }

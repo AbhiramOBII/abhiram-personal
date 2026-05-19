@@ -2,11 +2,18 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    {{-- PWA Meta Tags --}}
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4f98a3">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="theme-color" content="#151828">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="DayOS">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.png">
+    <link rel="apple-touch-startup-image" href="/icons/icon-512.png">
     <title>@yield('title', 'Admin') — Abhiram Chandramohan</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -46,21 +53,47 @@
         .mobile-drawer.active { transform: translateX(0); }
 
         /* Bottom nav for mobile */
-        .mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #151828; border-top: 1px solid rgba(248, 246, 241, 0.08); z-index: 30; padding-bottom: env(safe-area-inset-bottom, 0px); }
+        .mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #151828; border-top: 1px solid rgba(248, 246, 241, 0.08); z-index: 30; }
+
+        /* Safe area padding */
+        .safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4px); }
+        .safe-top    { padding-top: env(safe-area-inset-top, 0px); }
+
+        /* Prevent pull-to-refresh on dashboard */
+        body.pwa-page { overscroll-behavior-y: contain; }
+
+        /* Smooth scrolling for task lists */
+        .task-list { -webkit-overflow-scrolling: touch; scroll-snap-type: y proximity; }
+
+        /* Remove tap highlight on interactive elements */
+        * { -webkit-tap-highlight-color: transparent; }
+
+        /* Active states for touch */
+        button:active, [role="button"]:active, a:active {
+            opacity: 0.75;
+            transform: scale(0.98);
+            transition: opacity 0.1s, transform 0.1s;
+        }
 
         /* Main content needs bottom padding on mobile for bottom nav */
         @media (max-width: 1023px) {
             .mobile-bottom-nav { display: flex; }
-            .admin-main-content { padding-bottom: 80px !important; }
+            .admin-main-content { padding-bottom: 90px !important; }
             .admin-card { border-radius: 10px; }
         }
         @media (min-width: 1024px) {
             .admin-input { font-size: 14px; }
         }
+
+        /* PWA standalone mode — hide browser-only UI */
+        @media (display-mode: standalone) {
+            .hide-in-pwa { display: none !important; }
+            body { padding-top: env(safe-area-inset-top, 0px); }
+        }
     </style>
     @stack('head')
 </head>
-<body class="admin-body antialiased min-h-screen">
+<body class="admin-body pwa-page antialiased min-h-screen">
 
     <!-- Mobile Overlay -->
     <div class="mobile-overlay" id="mobileOverlay" onclick="closeMobileDrawer()"></div>
@@ -248,20 +281,35 @@
         <div class="flex-1 flex flex-col min-w-0">
 
             <!-- Top Bar -->
-            <header class="admin-topbar h-14 flex items-center justify-between px-4 sticky top-0 z-20">
-                <button onclick="openMobileDrawer()" class="lg:hidden w-10 h-10 flex items-center justify-center rounded-lg border-0 bg-transparent cursor-pointer">
-                    <svg class="w-[22px] h-[22px] text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/>
-                    </svg>
-                </button>
+            <header class="admin-topbar h-14 flex items-center justify-between px-4 sticky top-0 z-20 safe-top">
+                {{-- Mobile: DayOS icon + hamburger --}}
+                <div class="lg:hidden flex items-center gap-2">
+                    <button onclick="openMobileDrawer()" class="w-9 h-9 flex items-center justify-center rounded-lg border-0 bg-transparent cursor-pointer">
+                        <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+                    <img src="/icons/icon-72.png" alt="DayOS" class="w-7 h-7 rounded-md">
+                </div>
+                {{-- Desktop: empty spacer --}}
+                <div class="hidden lg:block w-10"></div>
 
                 <h1 class="font-heading text-[15px] font-semibold text-slate-900 m-0 flex-1 text-center">@yield('title', 'Dashboard')</h1>
 
-                <a href="/" target="_blank" class="w-10 h-10 flex items-center justify-center rounded-lg no-underline text-slate-400 hover:text-gold transition-colors">
-                    <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-                    </svg>
-                </a>
+                {{-- Right side: theme badge on Today page or external link --}}
+                <div class="flex items-center gap-2">
+                    @if(isset($todayHexColor) && request()->routeIs('admin.dashboard.today'))
+                        <span class="lg:hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border" style="color: {{ $todayHexColor }}; border-color: {{ $todayHexColor }}30; background: {{ $todayHexColor }}08;">
+                            <span class="w-2 h-2 rounded-full" style="background: {{ $todayHexColor }};"></span>
+                            {{ $todayDayName ?? now()->format('l') }}
+                        </span>
+                    @endif
+                    <a href="/" target="_blank" class="w-9 h-9 hidden lg:flex items-center justify-center rounded-lg no-underline text-slate-400 hover:text-gold transition-colors hide-in-pwa">
+                        <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                        </svg>
+                    </a>
+                </div>
             </header>
 
             <!-- Content -->
@@ -272,31 +320,36 @@
     </div>
 
     <!-- ─── Mobile Bottom Navigation ─── -->
-    <nav class="mobile-bottom-nav">
+    <nav class="mobile-bottom-nav safe-bottom">
         @php
             $bottomNavItems = [
                 ['route' => 'admin.dashboard.today', 'label' => 'Today', 'icon' => 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z'],
-                ['route' => 'admin.tasks.index', 'label' => 'Tasks', 'icon' => 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4'],
-                ['route' => 'admin.weekly-review.index', 'label' => 'Review', 'icon' => 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z'],
+                ['route' => 'admin.practices.index', 'label' => 'Practices', 'icon' => 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z'],
+                ['route' => null, 'label' => 'Add', 'icon' => 'plus'],
+                ['route' => 'admin.upskilling.index', 'label' => 'Learn', 'icon' => 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253'],
                 ['route' => 'admin.analytics.index', 'label' => 'Insights', 'icon' => 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'],
             ];
         @endphp
-        <div class="flex w-full justify-around py-2 pb-1">
+        <div class="flex w-full items-end justify-around pt-2 pb-1">
             @foreach($bottomNavItems as $item)
-                @php $isActive = request()->routeIs($item['route'] . '*'); @endphp
-                <a href="{{ route($item['route']) }}" class="flex flex-col items-center gap-0.5 py-1.5 px-3 no-underline min-w-[64px]">
-                    <svg class="w-6 h-6" style="color: {{ $isActive ? '#d0ad5d' : 'rgba(248,246,241,0.4)' }};" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="{{ $isActive ? '2' : '1.5' }}" d="{{ $item['icon'] }}"/>
-                    </svg>
-                    <span class="text-[10px]" style="font-weight: {{ $isActive ? '600' : '500' }}; color: {{ $isActive ? '#d0ad5d' : 'rgba(248,246,241,0.4)' }};">{{ $item['label'] }}</span>
-                </a>
+                @if($item['icon'] === 'plus')
+                    {{-- Center elevated Add button --}}
+                    <button onclick="document.dispatchEvent(new CustomEvent('dayos:open-add-task'))" data-action="open-add-task"
+                        class="relative -mt-5 w-[52px] h-[52px] rounded-full border-0 cursor-pointer flex items-center justify-center text-white"
+                        style="background: #4f98a3; box-shadow: 0 4px 16px rgba(79,152,163,0.4);">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                    </button>
+                @else
+                    @php $isActive = request()->routeIs($item['route'] . '*'); @endphp
+                    <a href="{{ route($item['route']) }}" class="flex flex-col items-center gap-0.5 py-1.5 px-3 no-underline min-w-[56px] relative">
+                        @if($isActive)<span class="absolute top-0 left-1/2 -translate-x-1/2 w-5 h-[2px] rounded-full" style="background: #4f98a3;"></span>@endif
+                        <svg class="w-[22px] h-[22px]" style="color: {{ $isActive ? '#4f98a3' : 'rgba(248,246,241,0.4)' }};" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="{{ $isActive ? '2' : '1.5' }}" d="{{ $item['icon'] }}"/>
+                        </svg>
+                        <span class="text-[10px]" style="font-weight: {{ $isActive ? '600' : '500' }}; color: {{ $isActive ? '#4f98a3' : 'rgba(248,246,241,0.4)' }};">{{ $item['label'] }}</span>
+                    </a>
+                @endif
             @endforeach
-            <button onclick="openMobileDrawer()" class="flex flex-col items-center gap-0.5 py-1.5 px-3 bg-transparent border-0 cursor-pointer min-w-[64px]">
-                <svg class="w-6 h-6" style="color: rgba(248,246,241,0.4);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/>
-                </svg>
-                <span class="text-[10px] font-medium" style="color: rgba(248,246,241,0.4);">More</span>
-            </button>
         </div>
     </nav>
 
@@ -314,5 +367,26 @@
     </script>
 
     @stack('scripts')
+
+    {{-- PWA Service Worker Registration --}}
+    <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => {
+            setInterval(() => reg.update(), 60000);
+          })
+          .catch(err => console.warn('SW registration failed:', err));
+      });
+    }
+    if (new URLSearchParams(window.location.search).get('action') === 'add-task') {
+      window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+          const addBtn = document.querySelector('[data-action="open-add-task"]');
+          if (addBtn) addBtn.click();
+        }, 500);
+      });
+    }
+    </script>
 </body>
 </html>

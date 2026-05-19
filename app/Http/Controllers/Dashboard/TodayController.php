@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Dashboard;
 
 use App\Http\Controllers\Controller;
 use App\Models\DailyPlan;
+use App\Models\Task;
 use App\Models\TimeBlock;
 use App\Models\PracticeLog;
 use App\Models\LearningSession;
@@ -20,10 +21,7 @@ class TodayController extends Controller
     {
         $plan = DailyPlan::today();
 
-        if ($plan->wasRecentlyCreated) {
-            $rolloverService->rolloverYesterday();
-        }
-
+        $rolloverService->rolloverYesterday();
         $recurringService->generateForToday();
         $practiceService->generateLogsForToday();
 
@@ -60,6 +58,14 @@ class TodayController extends Controller
 
         $isSundayVisionMode = now()->isSunday();
 
+        $pendingTasks = Task::active()
+            ->whereNull('parent_task_id')
+            ->where('is_completed', false)
+            ->where('daily_plan_id', '!=', $plan->id)
+            ->orderByDesc('id')
+            ->limit(30)
+            ->get(['id', 'title', 'pillar', 'priority', 'estimated_minutes']);
+
         $nudges = $nudgeService->getActiveNudges();
         $hasNudges = count($nudges) > 0;
 
@@ -89,6 +95,7 @@ class TodayController extends Controller
             'aiSuggestions',
             'overloadWarning',
             'dailyQuote',
+            'pendingTasks',
         ));
     }
 }

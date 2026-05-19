@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\PracticeController as ApiPracticeController;
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\UpskillingController as ApiUpskillingController;
 use App\Http\Controllers\Api\AIController as ApiAIController;
+use App\Http\Controllers\Api\DumpController as ApiDumpController;
 use App\Http\Controllers\Api\NudgeController as ApiNudgeController;
 use App\Http\Controllers\Api\WeeklyReviewController as ApiWeeklyReviewController;
 use App\Http\Controllers\Analytics\AnalyticsController;
@@ -15,11 +16,14 @@ use App\Http\Controllers\PracticeManagement\PracticeController as PracticeManage
 use App\Http\Controllers\TaskManagement\TaskController as TaskManagementController;
 use App\Http\Controllers\Upskilling\UpskillingController;
 use App\Http\Controllers\WeeklyReview\WeeklyReviewController;
+use App\Http\Controllers\OfflineController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('home');
 });
+
+Route::get('/offline', [OfflineController::class, 'index'])->name('offline');
 
 // ─── Admin Routes ───
 Route::prefix('admin')->name('admin.')->group(function () {
@@ -37,6 +41,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // Task Management
         Route::get('tasks', [TaskManagementController::class, 'index'])->name('tasks.index');
+        Route::post('tasks/bulk-upload', [TaskManagementController::class, 'bulkUpload'])->name('tasks.bulk-upload');
+        Route::get('tasks/sample-csv', [TaskManagementController::class, 'sampleCsv'])->name('tasks.sample-csv');
         Route::get('tasks/templates', [TaskManagementController::class, 'templates'])->name('tasks.templates');
         Route::post('tasks/templates', [TaskManagementController::class, 'storeTemplate'])->name('tasks.templates.store');
         Route::patch('tasks/templates/{template}/toggle', [TaskManagementController::class, 'toggleTemplate'])->name('tasks.templates.toggle');
@@ -94,15 +100,23 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('api/ai/weekly-insight/{review}', [ApiAIController::class, 'weeklyInsight'])->name('api.ai.weekly-insight');
         Route::post('api/ai/pattern-insight', [ApiAIController::class, 'patternInsight'])->name('api.ai.pattern-insight');
 
+        // Brain Dump API (JSON)
+        Route::post('api/dump/categorise', [ApiDumpController::class, 'categorise'])->name('api.dump.categorise');
+        Route::post('api/dump/confirm', [ApiDumpController::class, 'confirm'])->name('api.dump.confirm');
+
         // Task API (JSON) — static paths first to avoid wildcard conflicts
         Route::post('api/tasks', [TaskController::class, 'store'])->name('api.tasks.store');
         Route::patch('api/tasks/focus/{plan}', [TaskController::class, 'updateFocus'])->name('api.tasks.focus');
         Route::post('api/tasks/reorder', [TaskController::class, 'reorder'])->name('api.tasks.reorder');
+        Route::post('api/tasks/rollover-today', [TaskController::class, 'rolloverToday'])->name('api.tasks.rollover-today');
+        Route::get('api/tasks/search', [TaskController::class, 'search'])->name('api.tasks.search');
+        Route::post('api/tasks/{task}/pull-today', [TaskController::class, 'pullToToday'])->name('api.tasks.pull-today');
         Route::patch('api/tasks/{task}', [TaskController::class, 'update'])->name('api.tasks.update');
         Route::post('api/tasks/{task}/complete', [TaskController::class, 'complete'])->name('api.tasks.complete');
         Route::post('api/tasks/{task}/defer', [TaskController::class, 'defer'])->name('api.tasks.defer');
         Route::post('api/tasks/{task}/sub-task', [TaskController::class, 'addSubTask'])->name('api.tasks.subtask');
         Route::post('api/tasks/{task}/archive', [TaskController::class, 'archive'])->name('api.tasks.archive');
+        Route::post('api/tasks/{task}/reassign', [TaskController::class, 'reassign'])->name('api.tasks.reassign');
         Route::patch('api/tasks/{task}/recurring', [TaskController::class, 'setRecurring'])->name('api.tasks.recurring');
         Route::delete('api/tasks/{task}', [TaskController::class, 'destroy'])->name('api.tasks.destroy');
 

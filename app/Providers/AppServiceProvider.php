@@ -24,6 +24,7 @@ class AppServiceProvider extends ServiceProvider
         View::composer('admin.layouts.app', function ($view) {
             $today = WorkingDay::today();
             $view->with('todayHexColor', $today?->hex_color ?? '#64748b');
+            $view->with('todayDayName', $today?->day_name ?? now()->format('l'));
         });
     }
 }
