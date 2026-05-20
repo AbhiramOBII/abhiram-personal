@@ -256,6 +256,38 @@
     </div>
 
     {{-- ═══════════════════════════════════════════════
+         SECTION 6b — Reflective Journal
+    ═══════════════════════════════════════════════ --}}
+    @if(isset($reflectiveLogs) && $reflectiveLogs->count())
+    <div class="mb-8">
+        <h2 class="text-sm font-bold text-slate-800 tracking-tight mb-4 px-1">Reflective Journal</h2>
+        <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            @foreach($reflectiveLogs->groupBy(fn($l) => $l->logged_date->format('Y-m-d')) as $date => $dayLogs)
+                <div class="border-b border-slate-100 last:border-b-0">
+                    <div class="px-5 py-2.5 bg-slate-50/70">
+                        <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{{ \Carbon\Carbon::parse($date)->format('l, M j') }}</span>
+                    </div>
+                    @foreach($dayLogs as $rLog)
+                        <div class="px-5 py-3.5 border-t border-slate-50">
+                            <div class="flex items-start gap-3">
+                                <x-practice-icon :practice="$rLog->practice" size="18" />
+                                <div class="flex-1 min-w-0">
+                                    <span class="text-[13px] font-medium text-slate-700">{{ $rLog->practice->name }}</span>
+                                    @if($rLog->ai_prompt_used)
+                                        <p class="text-[11px] text-indigo-500 italic mt-0.5">{{ $rLog->ai_prompt_used }}</p>
+                                    @endif
+                                    <p class="text-sm text-slate-600 mt-1.5 leading-relaxed whitespace-pre-wrap">{{ $rLog->response_text }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
+    {{-- ═══════════════════════════════════════════════
          SECTION 7 — Next Week Planning
     ═══════════════════════════════════════════════ --}}
     <div class="mb-8">

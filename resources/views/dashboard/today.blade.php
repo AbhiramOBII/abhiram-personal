@@ -21,6 +21,11 @@
         50% { opacity: 0.4; }
     }
     [x-cloak] { display: none !important; }
+    @keyframes wipPulse {
+        0%, 100% { box-shadow: inset 0 0 0 0 rgba(0, 100, 148, 0); }
+        50% { box-shadow: inset 3px 0 0 0 rgba(0, 100, 148, 0.5); }
+    }
+    .wip-pulse { animation: wipPulse 2s ease-in-out infinite; }
     @keyframes nudgeSlideUp {
         from { opacity: 0; transform: translateY(20px); }
         to   { opacity: 1; transform: translateY(0); }
@@ -227,108 +232,126 @@
     @endif
 
     {{-- ═══════════════════════════════════════════════
-         SECTION 4b — Today's Practices
+         SECTION 4b — Behavioral Practices (checkbox only)
     ═══════════════════════════════════════════════ --}}
-    @if($practiceLogs->count())
+    @if($behavioralPractices->count() || $practiceLogs->where('practice.type', '!=', 'reflective')->count())
     @php
-        $practicesDone = $practiceLogs->where('is_completed', true)->count();
-        $practicesTotal = $practiceLogs->count();
-        // Group: stacked practices indented under their trigger
-        $topLevel = $practiceLogs->filter(fn($l) => !$l->practice->stack_after_practice_id);
-        $stacked = $practiceLogs->filter(fn($l) => $l->practice->stack_after_practice_id)->groupBy(fn($l) => $l->practice->stack_after_practice_id);
+        $bhLogs = $practiceLogs->filter(fn($l) => !$l->practice->isReflective());
+        $bhDone = $bhLogs->where('is_completed', true)->count();
+        $bhTotal = $bhLogs->count();
     @endphp
+    <div class="mb-7" x-data="{ bhDone: {{ $bhDone }} }" @bh-toggle.window="bhDone += $event.detail">
+        <div class="flex items-center justify-between mb-3 px-1">
+            <div class="flex items-center gap-2">
+                <span class="text-[15px]">✅</span>
+                <span class="text-[13px] font-bold text-slate-800 tracking-tight">Behavioral Practices</span>
+            </div>
+            <span class="px-3 py-0.5 rounded-xl text-[11px] font-semibold" style="background: {{ $hex }}10; color: {{ $hex }}; border: 1px solid {{ $hex }}20;" x-text="bhDone + ' / {{ $bhTotal }}'">{{ $bhDone }} / {{ $bhTotal }}</span>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            @foreach($bhLogs as $log)
+                @php $p = $log->practice; $streak = $p->currentStreak(); @endphp
+                <div x-data="{ completed: {{ $log->is_completed ? 'true' : 'false' }}, loading: false }"
+                     class="flex items-center gap-3.5 px-4 py-3 border-b border-slate-100 last:border-b-0 transition-all"
+                     :class="completed ? 'bg-slate-50/50' : 'bg-white'">
+
+                    {{-- Checkbox --}}
+                    <button @click="
+                        loading=true;
+                        if(completed){
+                            fetch('{{ url('admin/api/practices') }}/{{ $p->id }}/uncomplete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'}}).then(()=>{completed=false;loading=false;$dispatch('bh-toggle',-1);});
+                        } else {
+                            fetch('{{ url('admin/api/practices') }}/{{ $p->id }}/complete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'}}).then(()=>{completed=true;loading=false;$dispatch('bh-toggle',1);});
+                        }"
+                        :disabled="loading"
+                        class="w-[26px] h-[26px] rounded-lg cursor-pointer flex items-center justify-center transition-all duration-200 shrink-0"
+                        style="border: 2px solid {{ $p->hex_color }};"
+                        :style="completed ? 'background: {{ $p->hex_color }}; border-color: {{ $p->hex_color }};' : 'background: transparent;'">
+                        <svg x-show="completed" x-transition.scale class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                    </button>
+
+                    {{-- Icon + Name --}}
+                    <div class="flex items-center gap-2.5 flex-1 min-w-0">
+                        <x-practice-icon :practice="$p" size="20" />
+                        <span class="text-[13px] font-medium transition-all duration-200"
+                              :class="completed ? 'line-through text-slate-400' : 'text-slate-700'">{{ $p->name }}</span>
+                        @if($streak >= 3)
+                            <span class="text-[11px] inline-flex items-center gap-0.5 bg-orange-50 px-1.5 py-px rounded-md font-semibold text-orange-600 shrink-0">🔥 {{ $streak }}</span>
+                        @endif
+                    </div>
+
+                    {{-- Quantity (if quantified) --}}
+                    @if($p->isQuantified())
+                    <div x-data="{ qty: {{ $log->quantity ?? 0 }} }" class="flex items-center gap-1 shrink-0">
+                        <input type="number" x-model.number="qty" min="0"
+                            @change="fetch('{{ url('admin/api/practice-logs/quantity') }}', { method:'POST', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'}, body: JSON.stringify({practice_id: {{ $p->id }}, quantity: qty, date: '{{ now()->toDateString() }}'}) }).then(r=>r.json()).then(d=>{ if(d.auto_completed && !completed){ completed=true; $dispatch('bh-toggle',1); } })"
+                            class="w-12 px-1.5 py-1 rounded-lg border border-slate-200 text-center text-xs text-slate-600 outline-none bg-slate-50 focus:border-slate-300">
+                        <span class="text-[10px] text-slate-400 whitespace-nowrap">/ {{ $p->target_value }} {{ $p->unit }}</span>
+                    </div>
+                    @endif
+                </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
+    {{-- ═══════════════════════════════════════════════
+         SECTION 4b2 — Reflective Practices (textbox)
+    ═══════════════════════════════════════════════ --}}
+    @if($reflectivePractices->count())
+    @php $refDone = $reflectivePractices->filter(fn($p) => $p->logs->first()?->response_text)->count(); @endphp
     <div class="mb-7">
         <div class="flex items-center justify-between mb-3 px-1">
-            <span class="text-[13px] font-bold text-slate-800 tracking-tight">Today's Practices</span>
-            <span class="px-3 py-0.5 rounded-xl text-[11px] font-semibold" style="background: {{ $hex }}10; color: {{ $hex }}; border: 1px solid {{ $hex }}20;">{{ $practicesDone }} / {{ $practicesTotal }}</span>
+            <div class="flex items-center gap-2">
+                <span class="text-[15px]">🧘</span>
+                <span class="text-[13px] font-bold text-slate-800 tracking-tight">Reflective Practices</span>
+            </div>
+            <span class="px-3 py-0.5 rounded-xl text-[11px] font-semibold" style="background: {{ $hex }}10; color: {{ $hex }}; border: 1px solid {{ $hex }}20;">{{ $refDone }} / {{ $reflectivePractices->count() }}</span>
         </div>
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow overflow-hidden">
-            @foreach($topLevel as $log)
-                @php $p = $log->practice; $streak = $p->currentStreak(); @endphp
-                <div x-data="{ completed: {{ $log->is_completed ? 'true' : 'false' }}, twoMin: {{ $log->used_two_minute_version ? 'true' : 'false' }}, loading: false, showNote: {{ $log->is_completed ? 'true' : 'false' }}, note: '{{ addslashes($log->note ?? '') }}', noteSaved: false }">
-                    <div class="flex items-center gap-3 px-4 py-3.5 border-b border-slate-100 last:border-b-0 transition-opacity" :class="completed && 'opacity-50'">
-                        <span class="text-[22px] leading-none shrink-0">{{ $p->icon_emoji }}</span>
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                                <span class="text-sm font-medium text-slate-800" :class="completed && 'line-through !text-slate-400'">{{ $p->name }}</span>
-                                @if($streak >= 3)<span class="text-xs inline-flex items-center gap-0.5 bg-orange-50 px-1.5 py-px rounded-md font-semibold text-orange-600">🔥 {{ $streak }}</span>@endif
-                                <template x-if="twoMin"><span class="px-2 py-px rounded-md text-[9px] font-bold bg-amber-100 text-amber-800">2-min</span></template>
-                            </div>
-                            @if($p->cue)<p class="text-[11px] text-slate-400 mt-0.5">{{ $p->cue }}</p>@endif
-                            <button x-show="!showNote" @click="showNote = true" type="button" class="inline-flex items-center gap-1 mt-0.5 p-0 border-0 bg-transparent cursor-pointer text-[11px] text-slate-400 hover:text-slate-500 transition-colors">
-                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                                    note
-                                </button>
-                        </div>
-                        @if($p->is_two_minute_enabled)
-                        <button x-show="!completed" @click="loading=true; fetch('{{ url('admin/api/practices') }}/{{ $p->id }}/complete', { method:'POST', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'}, body: JSON.stringify({two_minute:true}) }).then(()=>{ completed=true; twoMin=true; showNote=true; loading=false; })"
-                                class="px-3 py-1.5 rounded-lg border border-amber-400 bg-amber-50 text-amber-800 text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-all hover:bg-amber-100 disabled:opacity-50" :disabled="loading">2 min</button>
-                        @endif
-                        <button @click="
-                            loading=true;
-                            if(completed){
-                                fetch('{{ url('admin/api/practices') }}/{{ $p->id }}/uncomplete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'}}).then(()=>{completed=false;twoMin=false;loading=false;});
-                            } else {
-                                fetch('{{ url('admin/api/practices') }}/{{ $p->id }}/complete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'}}).then(()=>{completed=true;showNote=true;loading=false;});
-                            }"
-                            :disabled="loading"
-                            class="w-[30px] h-[30px] rounded-full cursor-pointer flex items-center justify-center transition-all shrink-0"
-                            style="border: 2px solid {{ $p->hex_color }};"
-                            :style="completed ? 'background: {{ $p->hex_color }}; border-color: {{ $p->hex_color }}; box-shadow: 0 2px 8px {{ $p->hex_color }}40;' : 'background: transparent;'">
-                            <svg x-show="completed" class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                        </button>
-                    </div>
-                    <div x-show="showNote" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 -translate-y-1" x-transition:enter-end="opacity-100 translate-y-0"
-                         class="px-4 pb-3 pl-[52px] relative">
-                        <textarea x-model="note"
-                            @blur="fetch('{{ url('admin/api/practices/logs') }}/{{ $log->id }}/note', { method:'PATCH', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'}, body: JSON.stringify({note: note}) }).then(()=>{ noteSaved=true; setTimeout(()=>noteSaved=false, 1500); })"
-                            placeholder="How did this go? Any thoughts, friction, or wins worth remembering..."
-                            rows="2"
-                            class="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs text-slate-600 bg-slate-50 resize-y outline-none font-[inherit] transition-colors focus:border-slate-400"></textarea>
-                        <span x-show="noteSaved" x-transition.opacity class="absolute right-5 bottom-4 text-[10px] text-green-600 font-semibold">Saved</span>
-                    </div>
-                </div>
+        <div class="space-y-3">
+            @foreach($reflectivePractices as $rp)
+                @php
+                    $rLog = $rp->logs->first();
+                    $aiPrompt = $rLog?->ai_prompt_used ?? '';
+                    $responseText = $rLog?->response_text ?? '';
+                @endphp
+                <div x-data="{ response: `{{ str_replace(['`','\\'], ['\\`','\\\\'], $responseText) }}`, saving: false, saved: false, prompt: `{{ str_replace(['`','\\'], ['\\`','\\\\'], $aiPrompt) }}` }"
+                     class="bg-white border border-slate-200 rounded-2xl p-4 transition-shadow hover:shadow-md">
 
-                @foreach(($stacked[$p->id] ?? collect()) as $sLog)
-                    @php $sp = $sLog->practice; $sStreak = $sp->currentStreak(); @endphp
-                    <div x-data="{ completed: {{ $sLog->is_completed ? 'true' : 'false' }}, twoMin: {{ $sLog->used_two_minute_version ? 'true' : 'false' }}, loading: false, showNote: {{ $sLog->is_completed ? 'true' : 'false' }}, note: '{{ addslashes($sLog->note ?? '') }}', noteSaved: false }">
-                        <div class="flex items-center gap-3 pl-12 pr-4 py-3.5 bg-slate-50/60 border-b border-slate-100 last:border-b-0 transition-opacity" :class="completed && 'opacity-50'">
-                            <span class="text-lg leading-none shrink-0">{{ $sp->icon_emoji }}</span>
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-1.5 flex-wrap">
-                                    <span class="text-[13px] font-medium text-slate-600" :class="completed && 'line-through !text-slate-400'">{{ $sp->name }}</span>
-                                    @if($sStreak >= 3)<span class="text-[11px] bg-orange-50 px-1.5 py-px rounded font-semibold text-orange-600">🔥 {{ $sStreak }}</span>@endif
-                                    <template x-if="twoMin"><span class="px-1.5 py-px rounded text-[9px] font-bold bg-amber-100 text-amber-800">2-min</span></template>
-                                </div>
-                                @if($sp->stack_trigger)<p class="text-[10px] text-slate-400 mt-0.5">↳ {{ $sp->stack_trigger }}</p>@endif
-                                <button x-show="!showNote" @click="showNote = true" type="button" class="inline-flex items-center gap-1 mt-0.5 p-0 border-0 bg-transparent cursor-pointer text-[10px] text-slate-400 hover:text-slate-500 transition-colors">
-                                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                                    note
-                                </button>
-                            </div>
-                            @if($sp->is_two_minute_enabled)
-                            <button x-show="!completed" @click="loading=true; fetch('{{ url('admin/api/practices') }}/{{ $sp->id }}/complete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'},body:JSON.stringify({two_minute:true})}).then(()=>{completed=true;twoMin=true;showNote=true;loading=false;})"
-                                    class="px-2.5 py-1 rounded-lg border border-amber-400 bg-amber-50 text-amber-800 text-[10px] font-semibold cursor-pointer whitespace-nowrap hover:bg-amber-100 disabled:opacity-50" :disabled="loading">2 min</button>
-                            @endif
-                            <button @click="loading=true; if(completed){ fetch('{{ url('admin/api/practices') }}/{{ $sp->id }}/uncomplete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'}}).then(()=>{completed=false;twoMin=false;loading=false;}); } else { fetch('{{ url('admin/api/practices') }}/{{ $sp->id }}/complete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'}}).then(()=>{completed=true;showNote=true;loading=false;}); }"
-                                :disabled="loading"
-                                class="w-[26px] h-[26px] rounded-full cursor-pointer flex items-center justify-center transition-all shrink-0"
-                                style="border: 2px solid {{ $sp->hex_color }};"
-                                :style="completed ? 'background: {{ $sp->hex_color }}; border-color: {{ $sp->hex_color }}; box-shadow: 0 2px 6px {{ $sp->hex_color }}40;' : 'background: transparent;'">
-                                <svg x-show="completed" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                            </button>
+                    {{-- Header --}}
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: {{ $rp->hex_color }}12;">
+                            <x-practice-icon :practice="$rp" size="20" />
                         </div>
-                        <div x-show="showNote" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 -translate-y-1" x-transition:enter-end="opacity-100 translate-y-0"
-                             class="px-4 pb-2.5 pl-20 relative">
-                            <textarea x-model="note"
-                                @blur="fetch('{{ url('admin/api/practices/logs') }}/{{ $sLog->id }}/note', { method:'PATCH', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'}, body: JSON.stringify({note: note}) }).then(()=>{ noteSaved=true; setTimeout(()=>noteSaved=false, 1500); })"
-                                placeholder="How did this go? Any thoughts, friction, or wins worth remembering..."
-                                rows="2"
-                                class="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-[11px] text-slate-600 bg-slate-50 resize-y outline-none font-[inherit] transition-colors focus:border-slate-400"></textarea>
-                            <span x-show="noteSaved" x-transition.opacity class="absolute right-5 bottom-3.5 text-[10px] text-green-600 font-semibold">Saved</span>
+                        <div class="flex-1 min-w-0">
+                            <span class="text-sm font-semibold text-slate-800">{{ $rp->name }}</span>
+                            @if($rp->description)<p class="text-[11px] text-slate-400 mt-0.5">{{ $rp->description }}</p>@endif
+                        </div>
+                        <div class="shrink-0 flex items-center gap-1.5">
+                            <span x-show="saving" class="text-[10px] text-slate-400 font-medium">Saving…</span>
+                            <span x-show="saved" x-transition.opacity class="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                Saved
+                            </span>
+                            <div class="w-2 h-2 rounded-full shrink-0" :class="response?.trim() ? 'bg-emerald-400' : 'bg-slate-200'"></div>
                         </div>
                     </div>
-                @endforeach
+
+                    {{-- AI Prompt --}}
+                    <template x-if="prompt">
+                        <div class="mb-3 px-3.5 py-2.5 rounded-xl bg-indigo-50/60 border border-indigo-100">
+                            <p class="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-1">Today's Prompt</p>
+                            <p class="text-[13px] text-indigo-800 leading-relaxed italic" x-text="prompt"></p>
+                        </div>
+                    </template>
+
+                    {{-- Response textarea --}}
+                    <textarea x-model="response"
+                        @blur="if(response !== `{{ str_replace(['`','\\'], ['\\`','\\\\'], $responseText) }}`){ saving=true; fetch('{{ url('admin/api/practice-logs/response') }}', { method:'POST', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'}, body: JSON.stringify({practice_id: {{ $rp->id }}, response_text: response, date: '{{ now()->toDateString() }}'}) }).then(()=>{ saving=false; saved=true; setTimeout(()=>saved=false, 2000); }); }"
+                        placeholder="{{ $rp->input_type === 'list' ? '- Item 1\n- Item 2\n- Item 3' : 'Write your reflection…' }}"
+                        rows="{{ $rp->input_type === 'text_short' ? 2 : ($rp->input_type === 'list' ? 4 : 3) }}"
+                        class="w-full px-3.5 py-3 rounded-xl border border-slate-200 text-sm text-slate-700 bg-slate-50/80 resize-y outline-none transition-all duration-200 focus:border-indigo-300 focus:bg-white focus:shadow-sm placeholder:text-slate-300"></textarea>
+                </div>
             @endforeach
         </div>
     </div>
@@ -430,7 +453,7 @@
                     <span class="text-[13px] font-bold text-slate-800 tracking-tight">{{ $block->name }}</span>
                     <span class="text-[11px] text-slate-400">{{ \Carbon\Carbon::parse($block->start_time)->format('H:i') }}–{{ \Carbon\Carbon::parse($block->end_time)->format('H:i') }}</span>
                     <span class="inline-flex items-center justify-center min-w-[20px] h-5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5"
-                          x-text="(groups['{{ $block->id }}'] || []).filter(t=>!t.is_completed).length"></span>
+                          x-text="(groups['{{ $block->id }}'] || []).filter(t=> t.status !== 'done').length"></span>
                 </div>
                 <div class="task-group bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow min-h-[4px] overflow-hidden" data-block-id="{{ $block->id }}">
                     <template x-for="task in sortedGroup('{{ $block->id }}')" :key="task.id">
@@ -447,13 +470,20 @@
                             </div>
                             {{-- Task card --}}
                             <div class="flex items-center gap-3 px-4 py-3.5 bg-white relative transition-all hover:bg-slate-50/50"
-                                 :style="'transform:translateX(' + offset + 'px);' + (swiping ? '' : 'transition:transform 0.3s ease;') + (task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.is_completed ? 'opacity:0.4;' : '')"
+                                 :style="'transform:translateX(' + offset + 'px);' + (swiping ? '' : 'transition:transform 0.3s ease;') + (task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.status === 'done' ? 'opacity:0.4;' : '')"
+                                 :class="task.status === 'wip' && 'wip-pulse'"
                                  @touchstart="onTouchStart($event)" @touchmove="onTouchMove($event)" @touchend="onTouchEnd()">
-                                <div class="drag-handle cursor-grab text-slate-300 shrink-0 touch-none p-1 hidden sm:block">
+                                <div class="drag-handle cursor-grab text-slate-300 shrink-0 touch-none p-1">
                                     <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
                                 </div>
+                                {{-- Status cycle button --}}
+                                <button class="w-6 h-6 rounded-md flex items-center justify-center cursor-pointer border-0 shrink-0 text-[13px] leading-none transition-transform active:scale-[0.85]"
+                                        :style="'background:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).bg + ';color:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).color"
+                                        :title="(STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).label"
+                                        @click="cycleTaskStatus(task)"
+                                        x-text="(STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).emoji"></button>
                                 <span class="w-2 h-2 rounded-full shrink-0" :style="'background:' + priorityColor(task.priority)"></span>
-                                <span class="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate" :class="task.is_completed && 'line-through !text-slate-400'" x-text="task.title"></span>
+                                <span class="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate" :class="task.status === 'done' && 'line-through !text-slate-400'" x-text="task.title"></span>
                                 <template x-if="task.pillar">
                                     <span :class="pillarClasses(task.pillar)" class="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap hidden sm:inline" x-text="task.pillar"></span>
                                 </template>
@@ -464,9 +494,6 @@
                                     <span class="text-[11px] text-slate-400 whitespace-nowrap font-medium" x-text="task.estimated_minutes + 'm'"></span>
                                 </template>
                                 <div class="flex gap-1 shrink-0 hidden sm:flex">
-                                    <button class="w-8 h-8 rounded-lg border border-slate-200 bg-white cursor-pointer flex items-center justify-center transition-all hover:bg-emerald-50 hover:border-emerald-300 active:scale-[0.92]" @click="completeTask(task)" :disabled="task.is_completed" :class="task.is_completed && 'opacity-25 !cursor-default'" title="Complete">
-                                        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                    </button>
                                     <button class="w-8 h-8 rounded-lg border border-slate-200 bg-white cursor-pointer flex items-center justify-center transition-all hover:bg-amber-50 hover:border-amber-300 active:scale-[0.92]" @click="deferTask(task)" title="Defer to tomorrow">
                                         <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
                                     </button>
@@ -486,7 +513,7 @@
             <div class="flex items-center gap-2 mb-2.5 px-1">
                 <span class="text-[13px] font-bold text-slate-800 tracking-tight">Anytime</span>
                 <span class="inline-flex items-center justify-center min-w-[20px] h-5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5"
-                      x-text="(groups['anytime'] || []).filter(t=>!t.is_completed).length"></span>
+                      x-text="(groups['anytime'] || []).filter(t=> t.status !== 'done').length"></span>
             </div>
             <div class="task-group bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow min-h-[4px] overflow-hidden" data-block-id="anytime">
                 <template x-for="task in sortedGroup('anytime')" :key="task.id">
@@ -503,13 +530,20 @@
                         </div>
                         {{-- Task card --}}
                         <div class="flex items-center gap-3 px-4 py-3.5 bg-white relative transition-all hover:bg-slate-50/50"
-                             :style="'transform:translateX(' + offset + 'px);' + (swiping ? '' : 'transition:transform 0.3s ease;') + (task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.is_completed ? 'opacity:0.4;' : '')"
+                             :style="'transform:translateX(' + offset + 'px);' + (swiping ? '' : 'transition:transform 0.3s ease;') + (task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.status === 'done' ? 'opacity:0.4;' : '')"
+                             :class="task.status === 'wip' && 'wip-pulse'"
                              @touchstart="onTouchStart($event)" @touchmove="onTouchMove($event)" @touchend="onTouchEnd()">
-                            <div class="drag-handle cursor-grab text-slate-300 shrink-0 touch-none p-1 hidden sm:block">
+                            <div class="drag-handle cursor-grab text-slate-300 shrink-0 touch-none p-1">
                                 <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
                             </div>
+                            {{-- Status cycle button --}}
+                            <button class="w-6 h-6 rounded-md flex items-center justify-center cursor-pointer border-0 shrink-0 text-[13px] leading-none transition-transform active:scale-[0.85]"
+                                    :style="'background:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).bg + ';color:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).color"
+                                    :title="(STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).label"
+                                    @click="cycleTaskStatus(task)"
+                                    x-text="(STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).emoji"></button>
                             <span class="w-2 h-2 rounded-full shrink-0" :style="'background:' + priorityColor(task.priority)"></span>
-                            <span class="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate" :class="task.is_completed && 'line-through !text-slate-400'" x-text="task.title"></span>
+                            <span class="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate" :class="task.status === 'done' && 'line-through !text-slate-400'" x-text="task.title"></span>
                             <template x-if="task.pillar">
                                 <span :class="pillarClasses(task.pillar)" class="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap hidden sm:inline" x-text="task.pillar"></span>
                             </template>
@@ -520,9 +554,6 @@
                                 <span class="text-[11px] text-slate-400 whitespace-nowrap font-medium" x-text="task.estimated_minutes + 'm'"></span>
                             </template>
                             <div class="flex gap-1 shrink-0 hidden sm:flex">
-                                <button class="w-8 h-8 rounded-lg border border-slate-200 bg-white cursor-pointer flex items-center justify-center transition-all hover:bg-emerald-50 hover:border-emerald-300 active:scale-[0.92]" @click="completeTask(task)" :disabled="task.is_completed" :class="task.is_completed && 'opacity-25 !cursor-default'" title="Complete">
-                                    <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                </button>
                                 <button class="w-8 h-8 rounded-lg border border-slate-200 bg-white cursor-pointer flex items-center justify-center transition-all hover:bg-amber-50 hover:border-amber-300 active:scale-[0.92]" @click="deferTask(task)" title="Defer to tomorrow">
                                     <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
                                 </button>
@@ -747,7 +778,7 @@
         @if(!empty($overloadWarning['defer_suggestions']))
         <div class="px-4 pb-3 space-y-1.5">
             @foreach($overloadWarning['defer_suggestions'] as $deferTitle)
-                @php $deferTask = $plan->tasks()->where('title', $deferTitle)->where('is_completed', false)->first(); @endphp
+                @php $deferTask = $plan->tasks()->where('title', $deferTitle)->whereIn('status', ['backlog', 'wip'])->first(); @endphp
                 @if($deferTask)
                 <div class="flex items-center justify-between gap-2">
                     <span class="text-xs text-slate-600 truncate">{{ $deferTitle }}</span>
@@ -777,9 +808,19 @@
         defer: id => '{{ url("admin/api/tasks") }}/' + id + '/defer',
         destroy: id => '{{ url("admin/api/tasks") }}/' + id,
         reorder: '{{ route("admin.api.tasks.reorder") }}',
+        cycleStatus: id => '{{ url("admin/api/tasks") }}/' + id + '/cycle-status',
+        updateStatus: id => '{{ url("admin/api/tasks") }}/' + id + '/status',
     };
 
     const PILLAR_MAP = @js($pillarColors);
+
+    const STATUS_CONFIG = {
+        backlog:  { label: 'Backlog',  color: '#7a7974', bg: '#7a797422', emoji: '📋' },
+        wip:      { label: 'WIP',      color: '#006494', bg: '#00649422', emoji: '⚡' },
+        done:     { label: 'Done',     color: '#437a22', bg: '#437a2222', emoji: '✅' },
+        deferred: { label: 'Deferred', color: '#964219', bg: '#96421922', emoji: '⏭️' },
+    };
+    const STATUS_CYCLE = { backlog: 'wip', wip: 'done', done: 'backlog', deferred: 'backlog' };
 
     function taskList() {
         return {
@@ -798,6 +839,11 @@
                         handle: '.drag-handle',
                         animation: 150,
                         ghostClass: 'opacity-30',
+                        delay: 150,
+                        delayOnTouchOnly: true,
+                        touchStartThreshold: 5,
+                        forceFallback: true,
+                        fallbackClass: 'opacity-50',
                         onEnd: (evt) => {
                             const fromBlock = evt.from.dataset.blockId;
                             const toBlock = evt.to.dataset.blockId;
@@ -836,8 +882,10 @@
 
             sortedGroup(blockId) {
                 const tasks = this.groups[blockId] || [];
+                const order = { wip: 0, backlog: 1, deferred: 2, done: 3 };
                 return [...tasks].sort((a,b) => {
-                    if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
+                    const sa = order[a.status] ?? 1, sb = order[b.status] ?? 1;
+                    if (sa !== sb) return sa - sb;
                     return (a.sort_order || 0) - (b.sort_order || 0);
                 });
             },
@@ -868,10 +916,23 @@
                 return map[color] || map.gray;
             },
 
+            async cycleTaskStatus(task) {
+                const oldStatus = task.status || 'backlog';
+                const newStatus = STATUS_CYCLE[oldStatus] || 'backlog';
+                task.status = newStatus;
+                const wasDone = oldStatus === 'done';
+                const nowDone = newStatus === 'done';
+                if (nowDone && !wasDone) this.updateStats(1, 0);
+                if (wasDone && !nowDone) this.updateStats(-1, 0);
+                await fetch(API.cycleStatus(task.id), {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF},
+                });
+            },
+
             async completeTask(task) {
-                if (task.is_completed) return;
-                task.is_completed = true;
-                task.completed_at = new Date().toISOString();
+                if (task.status === 'done') return;
+                task.status = 'done';
                 this.updateStats(1, 0);
                 await fetch(API.complete(task.id), {
                     method: 'POST',
@@ -882,7 +943,7 @@
             async deferTask(task) {
                 const blockKey = task.time_block_id ? String(task.time_block_id) : 'anytime';
                 this.groups[blockKey] = (this.groups[blockKey] || []).filter(t => t.id !== task.id);
-                this.updateStats(task.is_completed ? -1 : 0, -1);
+                this.updateStats(task.status === 'done' ? -1 : 0, -1);
                 await fetch(API.defer(task.id), {
                     method: 'POST',
                     headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF},
@@ -892,7 +953,7 @@
             async deleteTask(task) {
                 const blockKey = task.time_block_id ? String(task.time_block_id) : 'anytime';
                 this.groups[blockKey] = (this.groups[blockKey] || []).filter(t => t.id !== task.id);
-                this.updateStats(task.is_completed ? -1 : 0, -1);
+                this.updateStats(task.status === 'done' ? -1 : 0, -1);
                 await fetch(API.destroy(task.id), {
                     method: 'DELETE',
                     headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF},
@@ -1149,7 +1210,7 @@
                 if (this.swipeAction === 'complete') {
                     await fetch(API.complete(this.taskId), { method: 'POST', headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF} });
                     const tl = document.querySelector('[x-data="taskList()"]');
-                    if (tl) { const d = Alpine.$data(tl); if (d) { Object.keys(d.groups).forEach(k => { d.groups[k] = (d.groups[k]||[]).map(t => t.id == this.taskId ? {...t, is_completed:true} : t); }); d.updateStats(1,0); } }
+                    if (tl) { const d = Alpine.$data(tl); if (d) { Object.keys(d.groups).forEach(k => { d.groups[k] = (d.groups[k]||[]).map(t => t.id == this.taskId ? {...t, status:'done'} : t); }); d.updateStats(1,0); } }
                 } else if (this.swipeAction === 'defer') {
                     await fetch(API.defer(this.taskId), { method: 'POST', headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF} });
                     const tl = document.querySelector('[x-data="taskList()"]');

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\WeeklyReview;
 
 use App\Http\Controllers\Controller;
+use App\Models\PracticeLog;
 use App\Models\WeeklyReview;
 use App\Services\AIService;
 use App\Services\WeeklyReviewService;
@@ -20,7 +21,15 @@ class WeeklyReviewController extends Controller
         $suggestions = $this->service->generateNextWeekSuggestions($review);
         $aiInsight = $aiService->getWeeklyInsight($review);
 
-        return view('weekly-review.index', compact('review', 'stats', 'identityPrompt', 'suggestions', 'aiInsight'));
+        $reflectiveLogs = PracticeLog::whereHas('practice', fn($q) => $q->where('type', 'reflective'))
+            ->whereBetween('logged_date', [$review->week_start, $review->week_end])
+            ->whereNotNull('response_text')
+            ->where('response_text', '!=', '')
+            ->with('practice')
+            ->orderBy('logged_date')
+            ->get();
+
+        return view('weekly-review.index', compact('review', 'stats', 'identityPrompt', 'suggestions', 'aiInsight', 'reflectiveLogs'));
     }
 
     public function history()

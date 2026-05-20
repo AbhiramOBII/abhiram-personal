@@ -7,6 +7,7 @@ use App\Models\Practice;
 use App\Models\PracticeLog;
 use App\Services\PracticeService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class PracticeController extends Controller
 {
@@ -18,6 +19,9 @@ class PracticeController extends Controller
             ->with(['stackAfter', 'stackedPractices'])
             ->orderBy('sort_order')
             ->get();
+
+        $reflective = $practices->where('type', 'reflective');
+        $behavioral = $practices->where('type', 'behavioral');
 
         $today = now()->toDateString();
         $thirtyDaysAgo = now()->subDays(30)->toDateString();
@@ -57,6 +61,8 @@ class PracticeController extends Controller
 
         return view('practice-management.index', compact(
             'practices',
+            'reflective',
+            'behavioral',
             'todayLogs',
             'streakData',
             'heatmapData',
@@ -69,6 +75,7 @@ class PracticeController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'type' => 'sometimes|in:reflective,behavioral',
             'description' => 'nullable|string',
             'cue' => 'nullable|string|max:255',
             'reward' => 'nullable|string|max:255',
@@ -77,15 +84,26 @@ class PracticeController extends Controller
             'pillar' => 'nullable|string|max:40',
             'hex_color' => 'nullable|string|max:7',
             'icon_emoji' => 'nullable|string|max:10',
+            'icon_fallback_emoji' => 'nullable|string|max:10',
+            'prompt_template' => 'nullable|string',
+            'input_type' => 'sometimes|in:text_short,text_long,list',
+            'unit' => 'nullable|string|max:40',
+            'target_value' => 'nullable|integer|min:1',
             'frequency_type' => 'sometimes|in:daily,specific_days',
             'frequency_days' => 'nullable|array',
             'frequency_days.*' => 'integer|min:0|max:6',
             'stack_after_practice_id' => 'nullable|exists:practices,id',
             'stack_trigger' => 'nullable|string|max:255',
             'is_two_minute_enabled' => 'sometimes|boolean',
+            'icon' => 'nullable|file|mimes:svg|max:100',
         ]);
 
         $validated['sort_order'] = Practice::max('sort_order') + 1;
+
+        if ($request->hasFile('icon')) {
+            $validated['icon_path'] = $request->file('icon')->store('practice-icons', 'public');
+        }
+        unset($validated['icon']);
 
         Practice::create($validated);
 
@@ -98,6 +116,7 @@ class PracticeController extends Controller
     {
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
+            'type' => 'sometimes|in:reflective,behavioral',
             'description' => 'nullable|string',
             'cue' => 'nullable|string|max:255',
             'reward' => 'nullable|string|max:255',
@@ -106,13 +125,27 @@ class PracticeController extends Controller
             'pillar' => 'nullable|string|max:40',
             'hex_color' => 'nullable|string|max:7',
             'icon_emoji' => 'nullable|string|max:10',
+            'icon_fallback_emoji' => 'nullable|string|max:10',
+            'prompt_template' => 'nullable|string',
+            'input_type' => 'sometimes|in:text_short,text_long,list',
+            'unit' => 'nullable|string|max:40',
+            'target_value' => 'nullable|integer|min:1',
             'frequency_type' => 'sometimes|in:daily,specific_days',
             'frequency_days' => 'nullable|array',
             'frequency_days.*' => 'integer|min:0|max:6',
             'stack_after_practice_id' => 'nullable|exists:practices,id',
             'stack_trigger' => 'nullable|string|max:255',
             'is_two_minute_enabled' => 'sometimes|boolean',
+            'icon' => 'nullable|file|mimes:svg|max:100',
         ]);
+
+        if ($request->hasFile('icon')) {
+            if ($practice->icon_path) {
+                Storage::disk('public')->delete($practice->icon_path);
+            }
+            $validated['icon_path'] = $request->file('icon')->store('practice-icons', 'public');
+        }
+        unset($validated['icon']);
 
         $practice->update($validated);
 

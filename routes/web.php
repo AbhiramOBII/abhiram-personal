@@ -4,6 +4,8 @@ use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\TimeBlocksController;
 use App\Http\Controllers\Admin\WorkingDaysController;
 use App\Http\Controllers\Api\PracticeController as ApiPracticeController;
+use App\Http\Controllers\Api\PracticeIconController;
+use App\Http\Controllers\Api\PracticeLogController;
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\UpskillingController as ApiUpskillingController;
 use App\Http\Controllers\Api\AIController as ApiAIController;
@@ -60,6 +62,15 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('api/practices/{practice}/uncomplete', [ApiPracticeController::class, 'uncomplete'])->name('api.practices.uncomplete');
         Route::patch('api/practices/logs/{log}/note', [ApiPracticeController::class, 'updateNote'])->name('api.practices.logs.note');
 
+        // Practice Icon API (JSON)
+        Route::post('api/practices/{practice}/icon', [PracticeIconController::class, 'upload'])->name('api.practices.icon.upload');
+        Route::delete('api/practices/{practice}/icon', [PracticeIconController::class, 'delete'])->name('api.practices.icon.delete');
+
+        // Practice Log API (JSON)
+        Route::post('api/practice-logs/toggle', [PracticeLogController::class, 'toggle'])->name('api.practice-logs.toggle');
+        Route::post('api/practice-logs/response', [PracticeLogController::class, 'saveResponse'])->name('api.practice-logs.response');
+        Route::post('api/practice-logs/quantity', [PracticeLogController::class, 'saveQuantity'])->name('api.practice-logs.quantity');
+
         // Upskilling
         Route::get('upskilling', [UpskillingController::class, 'index'])->name('upskilling.index');
         Route::post('upskilling/domains', [UpskillingController::class, 'storeDomain'])->name('upskilling.domains.store');
@@ -111,7 +122,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('api/tasks/rollover-today', [TaskController::class, 'rolloverToday'])->name('api.tasks.rollover-today');
         Route::get('api/tasks/search', [TaskController::class, 'search'])->name('api.tasks.search');
         Route::post('api/tasks/{task}/pull-today', [TaskController::class, 'pullToToday'])->name('api.tasks.pull-today');
+        Route::patch('api/tasks/{task}/status', [TaskController::class, 'updateStatus'])->name('api.tasks.status');
         Route::patch('api/tasks/{task}', [TaskController::class, 'update'])->name('api.tasks.update');
+        Route::post('api/tasks/{task}/cycle-status', [TaskController::class, 'cycleStatus'])->name('api.tasks.cycle-status');
         Route::post('api/tasks/{task}/complete', [TaskController::class, 'complete'])->name('api.tasks.complete');
         Route::post('api/tasks/{task}/defer', [TaskController::class, 'defer'])->name('api.tasks.defer');
         Route::post('api/tasks/{task}/sub-task', [TaskController::class, 'addSubTask'])->name('api.tasks.subtask');

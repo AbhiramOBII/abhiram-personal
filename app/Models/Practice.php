@@ -6,11 +6,13 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Practice extends Model
 {
     protected $fillable = [
         'name',
+        'type',
         'description',
         'cue',
         'reward',
@@ -19,6 +21,12 @@ class Practice extends Model
         'pillar',
         'hex_color',
         'icon_emoji',
+        'icon_path',
+        'icon_fallback_emoji',
+        'prompt_template',
+        'input_type',
+        'unit',
+        'target_value',
         'frequency_type',
         'frequency_days',
         'stack_after_practice_id',
@@ -27,6 +35,8 @@ class Practice extends Model
         'is_active',
         'sort_order',
     ];
+
+    protected $appends = ['icon_url'];
 
     protected function casts(): array
     {
@@ -55,6 +65,47 @@ class Practice extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    public function scopeReflective(Builder $query): Builder
+    {
+        return $query->where('type', 'reflective');
+    }
+
+    public function scopeBehavioral(Builder $query): Builder
+    {
+        return $query->where('type', 'behavioral');
+    }
+
+    public function isReflective(): bool
+    {
+        return $this->type === 'reflective';
+    }
+
+    public function isBehavioral(): bool
+    {
+        return $this->type === 'behavioral';
+    }
+
+    public function isQuantified(): bool
+    {
+        return $this->isBehavioral() && !is_null($this->target_value);
+    }
+
+    public function getIconUrlAttribute(): string
+    {
+        if ($this->icon_path) {
+            return Storage::url($this->icon_path);
+        }
+        return '';
+    }
+
+    public function getDisplayIconAttribute(): array
+    {
+        if ($this->icon_path) {
+            return ['type' => 'svg', 'value' => $this->icon_url];
+        }
+        return ['type' => 'emoji', 'value' => $this->icon_fallback_emoji ?? ($this->icon_emoji ?? '&#10024;')];
     }
 
     public function scopeForToday(Builder $query): Builder

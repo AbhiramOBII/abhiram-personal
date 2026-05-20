@@ -16,6 +16,9 @@ class PracticeLog extends Model
         'used_two_minute_version',
         'completed_at',
         'note',
+        'response_text',
+        'ai_prompt_used',
+        'quantity',
     ];
 
     protected function casts(): array
@@ -47,5 +50,13 @@ class PracticeLog extends Model
     public function scopeCompleted(Builder $query): Builder
     {
         return $query->where('is_completed', true);
+    }
+
+    public function getIsRespondedAttribute(): bool
+    {
+        if ($this->practice && $this->practice->isReflective()) {
+            return !empty($this->response_text);
+        }
+        return $this->is_completed;
     }
 }
