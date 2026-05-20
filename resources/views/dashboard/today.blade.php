@@ -457,50 +457,25 @@
                 </div>
                 <div class="task-group bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow min-h-[4px] overflow-hidden" data-block-id="{{ $block->id }}">
                     <template x-for="task in sortedGroup('{{ $block->id }}')" :key="task.id">
-                        <div class="relative overflow-hidden border-b border-slate-100 last:border-b-0" :data-task-id="task.id" data-task-card
-                             x-data="swipeTask(task.id)">
-                            {{-- Swipe reveal layer --}}
-                            <div class="absolute inset-0 flex pointer-events-none">
-                                <div class="flex-1 flex items-center justify-start pl-5 bg-emerald-50" :style="'opacity:' + Math.min(1, Math.max(0, offset / threshold))">
-                                    <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                                </div>
-                                <div class="flex-1 flex items-center justify-end pr-5 bg-amber-50" :style="'opacity:' + Math.min(1, Math.max(0, -offset / threshold))">
-                                    <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-                                </div>
-                            </div>
-                            {{-- Task card --}}
-                            <div class="flex items-center gap-3 px-4 py-3.5 bg-white relative transition-all hover:bg-slate-50/50"
-                                 :style="'transform:translateX(' + offset + 'px);' + (swiping ? '' : 'transition:transform 0.3s ease;') + (task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.status === 'done' ? 'opacity:0.4;' : '')"
+                        <div class="border-b border-slate-100 last:border-b-0" :data-task-id="task.id" data-task-card>
+                            <div class="flex items-center gap-3 px-4 py-3.5 bg-white relative transition-all cursor-pointer active:bg-slate-50"
+                                 :style="(task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.status === 'done' ? 'opacity:0.4;' : '')"
                                  :class="task.status === 'wip' && 'wip-pulse'"
-                                 @touchstart="onTouchStart($event)" @touchmove="onTouchMove($event)" @touchend="onTouchEnd()">
-                                <div class="drag-handle cursor-grab text-slate-300 shrink-0 touch-none p-1">
+                                 @click="openTaskAction(task)">
+                                <div class="drag-handle cursor-grab text-slate-300 shrink-0 touch-none p-1" @click.stop>
                                     <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
                                 </div>
-                                {{-- Status cycle button --}}
-                                <button class="w-6 h-6 rounded-md flex items-center justify-center cursor-pointer border-0 shrink-0 text-[13px] leading-none transition-transform active:scale-[0.85]"
-                                        :style="'background:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).bg + ';color:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).color"
-                                        :title="(STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).label"
-                                        @click="cycleTaskStatus(task)"
-                                        x-text="(STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).emoji"></button>
+                                <span class="w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[13px] leading-none"
+                                      :style="'background:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).bg + ';color:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).color"
+                                      x-text="(STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).emoji"></span>
                                 <span class="w-2 h-2 rounded-full shrink-0" :style="'background:' + priorityColor(task.priority)"></span>
                                 <span class="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate" :class="task.status === 'done' && 'line-through !text-slate-400'" x-text="task.title"></span>
-                                <template x-if="task.pillar">
-                                    <span :class="pillarClasses(task.pillar)" class="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap hidden sm:inline" x-text="task.pillar"></span>
-                                </template>
                                 <template x-if="task.is_rolled_over">
                                     <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-100 text-amber-800 whitespace-nowrap">↩ <span x-text="task.rollover_count"></span></span>
                                 </template>
                                 <template x-if="task.estimated_minutes">
                                     <span class="text-[11px] text-slate-400 whitespace-nowrap font-medium" x-text="task.estimated_minutes + 'm'"></span>
                                 </template>
-                                <div class="flex gap-1 shrink-0 hidden sm:flex">
-                                    <button class="w-8 h-8 rounded-lg border border-slate-200 bg-white cursor-pointer flex items-center justify-center transition-all hover:bg-amber-50 hover:border-amber-300 active:scale-[0.92]" @click="deferTask(task)" title="Defer to tomorrow">
-                                        <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-                                    </button>
-                                    <button class="w-8 h-8 rounded-lg border border-slate-200 bg-white cursor-pointer flex items-center justify-center transition-all hover:bg-red-50 hover:border-red-300 active:scale-[0.92]" @click="deleteTask(task)" title="Delete">
-                                        <svg class="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                    </button>
-                                </div>
                             </div>
                         </div>
                     </template>
@@ -517,53 +492,103 @@
             </div>
             <div class="task-group bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow min-h-[4px] overflow-hidden" data-block-id="anytime">
                 <template x-for="task in sortedGroup('anytime')" :key="task.id">
-                    <div class="relative overflow-hidden border-b border-slate-100 last:border-b-0" :data-task-id="task.id" data-task-card
-                         x-data="swipeTask(task.id)">
-                        {{-- Swipe reveal layer --}}
-                        <div class="absolute inset-0 flex pointer-events-none">
-                            <div class="flex-1 flex items-center justify-start pl-5 bg-emerald-50" :style="'opacity:' + Math.min(1, Math.max(0, offset / threshold))">
-                                <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                            </div>
-                            <div class="flex-1 flex items-center justify-end pr-5 bg-amber-50" :style="'opacity:' + Math.min(1, Math.max(0, -offset / threshold))">
-                                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-                            </div>
-                        </div>
-                        {{-- Task card --}}
-                        <div class="flex items-center gap-3 px-4 py-3.5 bg-white relative transition-all hover:bg-slate-50/50"
-                             :style="'transform:translateX(' + offset + 'px);' + (swiping ? '' : 'transition:transform 0.3s ease;') + (task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.status === 'done' ? 'opacity:0.4;' : '')"
+                    <div class="border-b border-slate-100 last:border-b-0" :data-task-id="task.id" data-task-card>
+                        <div class="flex items-center gap-3 px-4 py-3.5 bg-white relative transition-all cursor-pointer active:bg-slate-50"
+                             :style="(task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.status === 'done' ? 'opacity:0.4;' : '')"
                              :class="task.status === 'wip' && 'wip-pulse'"
-                             @touchstart="onTouchStart($event)" @touchmove="onTouchMove($event)" @touchend="onTouchEnd()">
-                            <div class="drag-handle cursor-grab text-slate-300 shrink-0 touch-none p-1">
+                             @click="openTaskAction(task)">
+                            <div class="drag-handle cursor-grab text-slate-300 shrink-0 touch-none p-1" @click.stop>
                                 <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
                             </div>
-                            {{-- Status cycle button --}}
-                            <button class="w-6 h-6 rounded-md flex items-center justify-center cursor-pointer border-0 shrink-0 text-[13px] leading-none transition-transform active:scale-[0.85]"
-                                    :style="'background:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).bg + ';color:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).color"
-                                    :title="(STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).label"
-                                    @click="cycleTaskStatus(task)"
-                                    x-text="(STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).emoji"></button>
+                            <span class="w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[13px] leading-none"
+                                  :style="'background:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).bg + ';color:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).color"
+                                  x-text="(STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).emoji"></span>
                             <span class="w-2 h-2 rounded-full shrink-0" :style="'background:' + priorityColor(task.priority)"></span>
                             <span class="flex-1 min-w-0 text-sm font-medium text-slate-800 truncate" :class="task.status === 'done' && 'line-through !text-slate-400'" x-text="task.title"></span>
-                            <template x-if="task.pillar">
-                                <span :class="pillarClasses(task.pillar)" class="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap hidden sm:inline" x-text="task.pillar"></span>
-                            </template>
                             <template x-if="task.is_rolled_over">
                                 <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-100 text-amber-800 whitespace-nowrap">↩ <span x-text="task.rollover_count"></span></span>
                             </template>
                             <template x-if="task.estimated_minutes">
                                 <span class="text-[11px] text-slate-400 whitespace-nowrap font-medium" x-text="task.estimated_minutes + 'm'"></span>
                             </template>
-                            <div class="flex gap-1 shrink-0 hidden sm:flex">
-                                <button class="w-8 h-8 rounded-lg border border-slate-200 bg-white cursor-pointer flex items-center justify-center transition-all hover:bg-amber-50 hover:border-amber-300 active:scale-[0.92]" @click="deferTask(task)" title="Defer to tomorrow">
-                                    <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-                                </button>
-                                <button class="w-8 h-8 rounded-lg border border-slate-200 bg-white cursor-pointer flex items-center justify-center transition-all hover:bg-red-50 hover:border-red-300 active:scale-[0.92]" @click="deleteTask(task)" title="Delete">
-                                    <svg class="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </template>
+            </div>
+        </div>
+
+        {{-- ═══════════════════════════════════════════════
+             Task Action Popup (Bottom Sheet)
+        ═══════════════════════════════════════════════ --}}
+        <div x-show="actionTask" x-cloak>
+            {{-- Overlay --}}
+            <div x-show="actionTask" x-transition.opacity @click="actionTask = null"
+                 class="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-[60]"></div>
+            {{-- Sheet --}}
+            <div x-show="actionTask" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="translate-y-0" x-transition:leave-end="translate-y-full"
+                 class="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl px-5 pt-4 pb-8 z-[70] max-w-[480px] mx-auto shadow-[0_-8px_40px_rgba(0,0,0,0.12)]">
+
+                {{-- Drag handle --}}
+                <div class="flex justify-center mb-4">
+                    <div class="w-9 h-1 rounded-sm bg-slate-200"></div>
+                </div>
+
+                {{-- Task title --}}
+                <div class="flex items-center gap-3 mb-5 px-1">
+                    <span class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-[14px] leading-none"
+                          :style="actionTask && 'background:' + (STATUS_CONFIG[actionTask.status]||STATUS_CONFIG.backlog).bg + ';color:' + (STATUS_CONFIG[actionTask.status]||STATUS_CONFIG.backlog).color"
+                          x-text="actionTask && (STATUS_CONFIG[actionTask.status]||STATUS_CONFIG.backlog).emoji"></span>
+                    <span class="text-[15px] font-semibold text-slate-800 truncate flex-1" x-text="actionTask?.title"></span>
+                    <button @click="actionTask = null" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 border-0 bg-transparent cursor-pointer">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                {{-- Status section --}}
+                <div class="mb-5">
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2.5 px-1">Status</p>
+                    <div class="grid grid-cols-4 gap-2">
+                        <template x-for="s in ['backlog','wip','done','deferred']" :key="s">
+                            <button @click="setTaskStatus(actionTask, s)"
+                                class="flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 cursor-pointer transition-all active:scale-95"
+                                :class="actionTask?.status === s ? 'border-slate-800 bg-slate-50 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-200'"
+                                :style="actionTask?.status === s ? 'border-color:' + (STATUS_CONFIG[s]||STATUS_CONFIG.backlog).color : ''">
+                                <span class="text-lg leading-none" x-text="(STATUS_CONFIG[s]||STATUS_CONFIG.backlog).emoji"></span>
+                                <span class="text-[11px] font-semibold" :class="actionTask?.status === s ? 'text-slate-800' : 'text-slate-500'" x-text="(STATUS_CONFIG[s]||STATUS_CONFIG.backlog).label"></span>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+
+                {{-- Importance section --}}
+                <div class="mb-5">
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2.5 px-1">Importance</p>
+                    <div class="grid grid-cols-3 gap-2">
+                        <template x-for="p in ['must','should','bonus']" :key="p">
+                            <button @click="setTaskPriority(actionTask, p)"
+                                class="flex items-center justify-center gap-2 py-3 rounded-xl border-2 cursor-pointer transition-all active:scale-95"
+                                :class="actionTask?.priority === p ? 'shadow-sm' : 'border-slate-100 bg-white hover:border-slate-200'"
+                                :style="actionTask?.priority === p ? 'border-color:' + priorityColor(p) + ';background:' + priorityColor(p) + '08;' : ''">
+                                <span class="w-2.5 h-2.5 rounded-full" :style="'background:' + priorityColor(p)"></span>
+                                <span class="text-[12px] font-semibold" :class="actionTask?.priority === p ? 'text-slate-800' : 'text-slate-500'" x-text="p.charAt(0).toUpperCase() + p.slice(1)"></span>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+
+                {{-- Action buttons --}}
+                <div class="flex gap-2">
+                    <button @click="deferTask(actionTask); actionTask = null;"
+                        class="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-amber-200 bg-amber-50 cursor-pointer transition-all active:scale-95 hover:bg-amber-100">
+                        <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                        <span class="text-[12px] font-semibold text-amber-700">Defer to Tomorrow</span>
+                    </button>
+                    <button @click="if(confirm('Delete this task?')){ deleteTask(actionTask); actionTask = null; }"
+                        class="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-red-200 bg-red-50 cursor-pointer transition-all active:scale-95 hover:bg-red-100">
+                        <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        <span class="text-[12px] font-semibold text-red-600">Delete</span>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -826,6 +851,7 @@
         return {
             groups: @js($groupedTasks),
             sortables: [],
+            actionTask: null,
 
             init() {
                 this.$nextTick(() => this.initSortable());
@@ -914,6 +940,35 @@
                     violet:'bg-violet-100 text-violet-700 border border-violet-200',
                 };
                 return map[color] || map.gray;
+            },
+
+            openTaskAction(task) {
+                this.actionTask = task;
+            },
+
+            async setTaskStatus(task, newStatus) {
+                if (!task || task.status === newStatus) return;
+                const oldStatus = task.status || 'backlog';
+                const wasDone = oldStatus === 'done';
+                const nowDone = newStatus === 'done';
+                task.status = newStatus;
+                if (nowDone && !wasDone) this.updateStats(1, 0);
+                if (wasDone && !nowDone) this.updateStats(-1, 0);
+                await fetch(API.updateStatus(task.id), {
+                    method: 'PATCH',
+                    headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF},
+                    body: JSON.stringify({ status: newStatus })
+                });
+            },
+
+            async setTaskPriority(task, newPriority) {
+                if (!task || task.priority === newPriority) return;
+                task.priority = newPriority;
+                await fetch('{{ url("admin/api/tasks") }}/' + task.id, {
+                    method: 'PATCH',
+                    headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF},
+                    body: JSON.stringify({ priority: newPriority })
+                });
             },
 
             async cycleTaskStatus(task) {
@@ -1183,43 +1238,13 @@
         };
     }
 
-    // ─── Swipe Gestures on Task Cards ───
-    function swipeTask(taskId) {
-        return {
-            taskId,
-            startX: 0,
-            currentX: 0,
-            swiping: false,
-            threshold: 80,
-            get offset() { return Math.max(-120, Math.min(120, this.currentX - this.startX)); },
-            get swipeAction() {
-                if (this.offset > this.threshold) return 'complete';
-                if (this.offset < -this.threshold) return 'defer';
-                return null;
-            },
-            onTouchStart(e) {
-                this.startX = e.touches[0].clientX;
-                this.swiping = true;
-            },
-            onTouchMove(e) {
-                if (!this.swiping) return;
-                this.currentX = e.touches[0].clientX;
-            },
-            async onTouchEnd() {
-                this.swiping = false;
-                if (this.swipeAction === 'complete') {
-                    await fetch(API.complete(this.taskId), { method: 'POST', headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF} });
-                    const tl = document.querySelector('[x-data="taskList()"]');
-                    if (tl) { const d = Alpine.$data(tl); if (d) { Object.keys(d.groups).forEach(k => { d.groups[k] = (d.groups[k]||[]).map(t => t.id == this.taskId ? {...t, status:'done'} : t); }); d.updateStats(1,0); } }
-                } else if (this.swipeAction === 'defer') {
-                    await fetch(API.defer(this.taskId), { method: 'POST', headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF} });
-                    const tl = document.querySelector('[x-data="taskList()"]');
-                    if (tl) { const d = Alpine.$data(tl); if (d) { Object.keys(d.groups).forEach(k => { d.groups[k] = (d.groups[k]||[]).filter(t => t.id != this.taskId); }); d.updateStats(0,-1); } }
-                }
-                this.currentX = this.startX;
-            }
-        };
-    }
+    // ─── Close task action popup on Escape ───
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const tl = document.querySelector('[x-data="taskList()"]');
+            if (tl) { const d = Alpine.$data(tl); if (d) d.actionTask = null; }
+        }
+    });
 
     // Listen for dayos:open-add-task event from bottom nav
     document.addEventListener('dayos:open-add-task', () => {
