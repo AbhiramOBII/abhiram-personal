@@ -27,7 +27,7 @@ class AnalyticsService
         foreach ($plans as $plan) {
             $dayNum = $plan->plan_date->dayOfWeek;
             $planned = $plan->tasks()->count();
-            $completed = $plan->tasks()->where('is_completed', true)->count();
+            $completed = $plan->tasks()->where('status', 'done')->count();
             $result[$dayNum]['planned'] += $planned;
             $result[$dayNum]['completed'] += $completed;
         }
@@ -44,7 +44,7 @@ class AnalyticsService
         $planIds = DailyPlan::whereBetween('plan_date', [$from->toDateString(), $to->toDateString()])->pluck('id');
 
         $tasks = Task::whereIn('daily_plan_id', $planIds)
-            ->selectRaw("COALESCE(pillar, 'untagged') as pillar_key, count(*) as total, sum(is_completed) as completed")
+            ->selectRaw("COALESCE(pillar, 'untagged') as pillar_key, count(*) as total, sum(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as completed")
             ->groupBy('pillar_key')
             ->get();
 
@@ -77,7 +77,7 @@ class AnalyticsService
         $planIds = DailyPlan::whereBetween('plan_date', [$from->toDateString(), $to->toDateString()])->pluck('id');
 
         $hours = Task::whereIn('daily_plan_id', $planIds)
-            ->where('is_completed', true)
+            ->where('status', 'done')
             ->whereNotNull('completed_at')
             ->selectRaw('HOUR(completed_at) as hr, count(*) as cnt')
             ->groupBy('hr')
@@ -104,7 +104,7 @@ class AnalyticsService
 
             $result[$cursor->toDateString()] = [
                 'rolled_over_count' => Task::whereIn('daily_plan_id', $planIds)->where('is_rolled_over', true)->count(),
-                'completed_count' => Task::whereIn('daily_plan_id', $planIds)->where('is_completed', true)->count(),
+                'completed_count' => Task::whereIn('daily_plan_id', $planIds)->where('status', 'done')->count(),
             ];
 
             $cursor->addWeek();
@@ -225,7 +225,7 @@ class AnalyticsService
         $planIds = DailyPlan::whereBetween('plan_date', [$from->toDateString(), $to->toDateString()])->pluck('id');
 
         $tasksPlanned = Task::whereIn('daily_plan_id', $planIds)->count();
-        $tasksCompleted = Task::whereIn('daily_plan_id', $planIds)->where('is_completed', true)->count();
+        $tasksCompleted = Task::whereIn('daily_plan_id', $planIds)->where('status', 'done')->count();
 
         $practicesPossible = PracticeLog::whereBetween('logged_date', [$from->toDateString(), $to->toDateString()])->count();
         $practicesCompleted = PracticeLog::whereBetween('logged_date', [$from->toDateString(), $to->toDateString()])->where('is_completed', true)->count();

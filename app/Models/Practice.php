@@ -34,6 +34,7 @@ class Practice extends Model
         'is_two_minute_enabled',
         'is_active',
         'sort_order',
+        'preferred_time',
     ];
 
     protected $appends = ['icon_url'];

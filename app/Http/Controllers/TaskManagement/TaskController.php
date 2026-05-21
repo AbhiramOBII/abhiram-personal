@@ -16,31 +16,60 @@ class TaskController extends Controller
     {
         $range = $request->get('range', 'week');
         $pillar = $request->get('pillar');
+        $status = $request->get('status');
+        $type = $request->get('type');
 
         $query = Task::active()->whereNull('parent_task_id')->with(['dailyPlan.workingDay', 'subTasks']);
 
-        if ($range === 'week') {
-            $query->whereHas('dailyPlan', fn($q) => $q->whereBetween('plan_date', [now()->startOfWeek(), now()->endOfWeek()]));
-        } elseif ($range === '7days') {
-            $query->whereHas('dailyPlan', fn($q) => $q->where('plan_date', '>=', now()->subDays(7)->toDateString()));
-        } elseif ($range === 'month') {
-            $query->whereHas('dailyPlan', fn($q) => $q->where('plan_date', '>=', now()->startOfMonth()->toDateString()));
+        // Type filter
+        if ($type === 'project') {
+            $query->project();
+        } elseif ($type === 'daily') {
+            $query->daily();
+        }
+
+        // Only apply date range for non-project views
+        if ($type !== 'project') {
+            if ($range === 'week') {
+                $query->whereHas('dailyPlan', fn($q) => $q->whereBetween('plan_date', [now()->startOfWeek(), now()->endOfWeek()]));
+            } elseif ($range === '7days') {
+                $query->whereHas('dailyPlan', fn($q) => $q->where('plan_date', '>=', now()->subDays(7)->toDateString()));
+            } elseif ($range === 'month') {
+                $query->whereHas('dailyPlan', fn($q) => $q->where('plan_date', '>=', now()->startOfMonth()->toDateString()));
+            }
         }
 
         if ($pillar) {
             $query->where('pillar', $pillar);
         }
 
-        $tasks = $query->orderByDesc(
-            DailyPlan::select('plan_date')->whereColumn('daily_plans.id', 'tasks.daily_plan_id')
-        )->get();
+        if ($status && in_array($status, ['backlog', 'wip', 'done', 'deferred'])) {
+            $query->where('status', $status);
+        }
 
-        $grouped = $tasks->groupBy(fn($t) => $t->dailyPlan->plan_date->toDateString());
+        if ($type === 'project') {
+            $tasks = $query->orderBy('deadline_at')->get();
+        } else {
+            $tasks = $query->orderByDesc(
+                DailyPlan::select('plan_date')->whereColumn('daily_plans.id', 'tasks.daily_plan_id')
+            )->get();
+        }
+
+        $grouped = $tasks->groupBy(fn($t) => $t->dailyPlan?->plan_date?->toDateString() ?? 'no-plan');
+
+        // Kanban data — group all tasks by status
+        $kanbanTasks = $tasks->groupBy('status')->map(fn($g) => $g->values()->toArray());
 
         $days = WorkingDay::ordered()->get()->keyBy('id');
         $timeBlocks = TimeBlock::orderBy('sort_order')->get();
+        $statusConfig = Task::statusConfig();
 
-        return view('task-management.index', compact('grouped', 'days', 'range', 'pillar', 'timeBlocks'));
+        // Project tasks grouped by deadline proximity for timeline view
+        $projectTimeline = $type === 'project'
+            ? $tasks->groupBy(fn($t) => $t->deadline_proximity)
+            : collect();
+
+        return view('task-management.index', compact('grouped', 'days', 'range', 'pillar', 'status', 'type', 'timeBlocks', 'kanbanTasks', 'statusConfig', 'projectTimeline'));
     }
 
     public function templates()

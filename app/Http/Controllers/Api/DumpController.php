@@ -71,6 +71,7 @@ class DumpController extends Controller
                 'priority' => $task['priority'] ?? 'should',
                 'estimated_minutes' => $task['estimated_minutes'] ?? 30,
                 'daily_plan_id' => $dailyPlan->id,
+                'status' => 'backlog',
                 'is_completed' => false,
                 'rollover_count' => 0,
             ]);

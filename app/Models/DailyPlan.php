@@ -44,11 +44,11 @@ class DailyPlan extends Model
 
     public function completionPercentage(): int
     {
-        $total = $this->tasks()->count();
+        $total = $this->tasks()->where('status', '!=', 'deferred')->count();
         if ($total === 0) {
             return 0;
         }
 
-        return (int) round(($this->tasks()->where('is_completed', true)->count() / $total) * 100);
+        return (int) round(($this->tasks()->where('status', 'done')->count() / $total) * 100);
     }
 }

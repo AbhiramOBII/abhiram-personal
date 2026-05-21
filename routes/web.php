@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\WorkingDaysController;
 use App\Http\Controllers\Api\PracticeController as ApiPracticeController;
 use App\Http\Controllers\Api\PracticeIconController;
 use App\Http\Controllers\Api\PracticeLogController;
+use App\Http\Controllers\Api\DeadlineAlertController;
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\UpskillingController as ApiUpskillingController;
 use App\Http\Controllers\Api\AIController as ApiAIController;
@@ -132,6 +133,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('api/tasks/{task}/reassign', [TaskController::class, 'reassign'])->name('api.tasks.reassign');
         Route::patch('api/tasks/{task}/recurring', [TaskController::class, 'setRecurring'])->name('api.tasks.recurring');
         Route::delete('api/tasks/{task}', [TaskController::class, 'destroy'])->name('api.tasks.destroy');
+
+        // Deadline Alert API (JSON)
+        Route::patch('api/deadline-alerts/{alert}/dismiss', [DeadlineAlertController::class, 'dismiss'])->name('api.deadline-alerts.dismiss');
 
         // Settings — Working Days
         Route::prefix('settings')->name('settings.')->group(function () {

@@ -60,7 +60,7 @@
     ═══════════════════════════════════════════════ --}}
     <div class="mb-8">
         <h2 class="text-sm font-bold text-slate-800 tracking-tight mb-4 px-1">Week at a Glance</h2>
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div class="bg-white border border-slate-200 rounded-xl p-4 text-center">
                 <p class="text-2xl font-bold tracking-tight" style="color: {{ $sundayHex }};">{{ $stats['tasks_completed'] }}/{{ $stats['tasks_planned'] }}</p>
                 <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-semibold">Tasks ({{ $stats['completion_rate'] }}%)</p>
@@ -72,6 +72,13 @@
             <div class="bg-white border border-slate-200 rounded-xl p-4 text-center">
                 <p class="text-2xl font-bold text-purple-600 tracking-tight">{{ $stats['upskill_minutes'] }}m</p>
                 <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-semibold">Upskilling</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-xl p-4 text-center">
+                <p class="text-2xl font-bold tracking-tight {{ $stats['project_tasks_overdue'] > 0 ? 'text-red-500' : 'text-blue-600' }}">
+                    {{ $stats['project_tasks_completed'] }}/{{ $stats['project_tasks_total'] }}
+                    @if($stats['project_tasks_overdue'] > 0)<span class="text-sm text-red-400"> ({{ $stats['project_tasks_overdue'] }} overdue)</span>@endif
+                </p>
+                <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-semibold">🗂️ Projects</p>
             </div>
             <div class="bg-white border border-slate-200 rounded-xl p-4 text-center">
                 @if($stats['best_day'])

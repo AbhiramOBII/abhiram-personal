@@ -442,6 +442,56 @@
     </div>
 
     {{-- ═══════════════════════════════════════════════
+         SECTION 4b — Deadline Alerts Banner
+    ═══════════════════════════════════════════════ --}}
+    @if($deadlineAlerts->isNotEmpty())
+    <div class="mb-5 flex flex-col gap-2">
+        @foreach($deadlineAlerts as $alert)
+        @if($alert->task && $alert->task->deadline_badge)
+        <div x-data="{ visible: true }" x-show="visible"
+             x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+             class="flex items-start gap-3 p-3.5 rounded-xl"
+             style="background: {{ $alert->task->deadline_badge['bg'] }}; border: 1px solid {{ $alert->task->deadline_badge['color'] }}44;">
+            <span class="text-[18px] shrink-0 mt-0.5">{{ $alert->task->deadline_badge['icon'] }}</span>
+            <div class="flex-1 min-w-0">
+                <span class="text-[10px] font-bold uppercase tracking-widest" style="color: {{ $alert->task->deadline_badge['color'] }};">
+                    {{ $alert->task->deadline_badge['label'] }} — {{ $alert->task->title }}
+                </span>
+                <p class="text-[13px] text-slate-700 mt-0.5 leading-snug">{{ $alert->ai_message }}</p>
+            </div>
+            <button @click="visible = false; fetch('{{ url('admin/api/deadline-alerts') }}/{{ $alert->id }}/dismiss', { method: 'PATCH', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' } })"
+                    class="text-slate-400 shrink-0 mt-0.5 bg-transparent border-0 cursor-pointer hover:opacity-70 text-sm">✕</button>
+        </div>
+        @endif
+        @endforeach
+    </div>
+    @endif
+
+    {{-- ═══════════════════════════════════════════════
+         SECTION 4c — Project Tasks
+    ═══════════════════════════════════════════════ --}}
+    @if($projectTasks->isNotEmpty() || $overdueProjects->isNotEmpty())
+    <div x-data="{ projOpen: true }" class="mb-6">
+        <button @click="projOpen = !projOpen"
+                class="flex items-center gap-2 w-full mb-2.5 px-1 bg-transparent border-0 cursor-pointer">
+            <span class="text-[15px]">🗂️</span>
+            <span class="text-[13px] font-bold text-slate-800 tracking-tight">Project Tasks</span>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500">{{ $projectTasks->count() + $overdueProjects->count() }}</span>
+            <svg x-show="!projOpen" class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="6,9 12,15 18,9"/></svg>
+            <svg x-show="projOpen" class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="18,15 12,9 6,15"/></svg>
+        </button>
+        <div x-show="projOpen" x-transition class="flex flex-col gap-2">
+            @foreach($overdueProjects as $task)
+                @include('dashboard.partials.project-task-card', ['task' => $task])
+            @endforeach
+            @foreach($projectTasks as $task)
+                @include('dashboard.partials.project-task-card', ['task' => $task])
+            @endforeach
+        </div>
+    </div>
+    @endif
+
+    {{-- ═══════════════════════════════════════════════
          SECTION 5 — Task List
     ═══════════════════════════════════════════════ --}}
     <div x-data="taskList()" x-init="init()">
@@ -473,9 +523,25 @@
                                 <template x-if="task.is_rolled_over">
                                     <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-100 text-amber-800 whitespace-nowrap">↩ <span x-text="task.rollover_count"></span></span>
                                 </template>
-                                <template x-if="task.estimated_minutes">
-                                    <span class="text-[11px] text-slate-400 whitespace-nowrap font-medium" x-text="task.estimated_minutes + 'm'"></span>
-                                </template>
+                                <span class="shrink-0" @click.stop>
+                                    <span x-data="tbcbPill(task)" class="relative inline-flex">
+                                        <button @click="open = !open"
+                                                class="px-1.5 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap inline-flex items-center gap-1 border cursor-pointer transition-all"
+                                                :class="task.due_date ? (isOverdue(task.due_date) ? 'bg-red-50 text-red-600 border-red-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200') : 'bg-slate-50 text-slate-400 border-slate-200'">
+                                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                            <span x-text="task.due_date ? 'TBCB ' + fmtDate(task.due_date) : 'TBCB'"></span>
+                                        </button>
+                                        <div x-show="open" x-cloak @click.outside="open = false"
+                                             class="absolute right-0 top-6 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-2.5" style="min-width: 160px;">
+                                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-0.5">Complete by</p>
+                                            <input type="date" :value="task.due_date ? task.due_date.substring(0,10) : ''"
+                                                   class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 outline-none"
+                                                   @change="setTbcb(task, $event.target.value)">
+                                            <button x-show="task.due_date" @click="setTbcb(task, null)"
+                                                    class="w-full mt-1.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-600 text-[10px] font-semibold cursor-pointer">Clear</button>
+                                        </div>
+                                    </span>
+                                </span>
                             </div>
                         </div>
                     </template>
@@ -508,9 +574,25 @@
                             <template x-if="task.is_rolled_over">
                                 <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-100 text-amber-800 whitespace-nowrap">↩ <span x-text="task.rollover_count"></span></span>
                             </template>
-                            <template x-if="task.estimated_minutes">
-                                <span class="text-[11px] text-slate-400 whitespace-nowrap font-medium" x-text="task.estimated_minutes + 'm'"></span>
-                            </template>
+                            <span class="shrink-0" @click.stop>
+                                <span x-data="tbcbPill(task)" class="relative inline-flex">
+                                    <button @click="open = !open"
+                                            class="px-1.5 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap inline-flex items-center gap-1 border cursor-pointer transition-all"
+                                            :class="task.due_date ? (isOverdue(task.due_date) ? 'bg-red-50 text-red-600 border-red-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200') : 'bg-slate-50 text-slate-400 border-slate-200'">
+                                        <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                        <span x-text="task.due_date ? 'TBCB ' + fmtDate(task.due_date) : 'TBCB'"></span>
+                                    </button>
+                                    <div x-show="open" x-cloak @click.outside="open = false"
+                                         class="absolute right-0 top-6 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-2.5" style="min-width: 160px;">
+                                        <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-0.5">Complete by</p>
+                                        <input type="date" :value="task.due_date ? task.due_date.substring(0,10) : ''"
+                                               class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 outline-none"
+                                               @change="setTbcb(task, $event.target.value)">
+                                        <button x-show="task.due_date" @click="setTbcb(task, null)"
+                                                class="w-full mt-1.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-600 text-[10px] font-semibold cursor-pointer">Clear</button>
+                                    </div>
+                                </span>
+                            </span>
                         </div>
                     </div>
                 </template>
@@ -692,6 +774,22 @@
             </div>
             @endif
 
+            {{-- Task Type Toggle --}}
+            <div class="mb-5">
+                <div class="flex gap-2 bg-slate-50 rounded-xl p-1">
+                    <button @click="taskType = 'daily'" type="button"
+                            class="flex-1 py-2.5 rounded-lg text-[12px] font-semibold border-0 cursor-pointer transition-all"
+                            :class="taskType === 'daily' ? 'bg-white text-slate-800 shadow-sm' : 'bg-transparent text-slate-400'">
+                        ⚡ Daily Task
+                    </button>
+                    <button @click="taskType = 'project'" type="button"
+                            class="flex-1 py-2.5 rounded-lg text-[12px] font-semibold border-0 cursor-pointer transition-all"
+                            :class="taskType === 'project' ? 'bg-white text-slate-800 shadow-sm' : 'bg-transparent text-slate-400'">
+                        🗂️ Project Task
+                    </button>
+                </div>
+            </div>
+
             {{-- Priority pills --}}
             <div class="mb-5">
                 <label class="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-2.5">Priority</label>
@@ -705,18 +803,40 @@
                 </div>
             </div>
 
-            {{-- Block + Pillar row --}}
-            <div class="flex gap-3 mb-5">
-                <div class="flex-1">
-                    <label class="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-2">Time Block</label>
-                    <select x-model="blockId" class="w-full py-3 px-3.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 bg-white outline-none appearance-none">
-                        <option value="">Anytime</option>
-                        @foreach($timeBlocks as $block)
-                            <option value="{{ $block->id }}">{{ $block->name }} ({{ \Carbon\Carbon::parse($block->start_time)->format('H:i') }})</option>
-                        @endforeach
-                    </select>
+            {{-- Daily Task Fields --}}
+            <div x-show="taskType === 'daily'" x-transition>
+                {{-- Block + Pillar row --}}
+                <div class="flex gap-3 mb-5">
+                    <div class="flex-1">
+                        <label class="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-2">Time Block</label>
+                        <select x-model="blockId" class="w-full py-3 px-3.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 bg-white outline-none appearance-none">
+                            <option value="">Anytime</option>
+                            @foreach($timeBlocks as $block)
+                                <option value="{{ $block->id }}">{{ $block->name }} ({{ \Carbon\Carbon::parse($block->start_time)->format('H:i') }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-2">Pillar</label>
+                        <select x-model="pillar" class="w-full py-3 px-3.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 bg-white outline-none appearance-none">
+                            <option value="">None</option>
+                            @foreach($pillarList as $p)
+                                <option value="{{ $p }}">{{ ucfirst($p) }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
-                <div class="flex-1">
+
+                {{-- Estimated minutes --}}
+                <div class="mb-6">
+                    <label class="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-2">Estimated Minutes</label>
+                    <input type="number" x-model="minutes" min="0" max="127" placeholder="e.g. 30" class="w-[100px] py-3 px-3.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 outline-none">
+                </div>
+            </div>
+
+            {{-- Project Task Fields --}}
+            <div x-show="taskType === 'project'" x-transition class="space-y-4 mb-6">
+                <div>
                     <label class="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-2">Pillar</label>
                     <select x-model="pillar" class="w-full py-3 px-3.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 bg-white outline-none appearance-none">
                         <option value="">None</option>
@@ -725,12 +845,21 @@
                         @endforeach
                     </select>
                 </div>
-            </div>
-
-            {{-- Estimated minutes --}}
-            <div class="mb-6">
-                <label class="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-2">Estimated Minutes</label>
-                <input type="number" x-model="minutes" min="0" max="127" placeholder="e.g. 30" class="w-[100px] py-3 px-3.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 outline-none">
+                <div class="flex gap-3">
+                    <div class="flex-1">
+                        <label class="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-2">Start Date</label>
+                        <input type="date" x-model="startDate" class="w-full py-3 px-3.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 outline-none bg-white">
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-2">Deadline <span class="text-red-400">*</span></label>
+                        <input type="datetime-local" x-model="deadlineAt" class="w-full py-3 px-3.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 outline-none bg-white">
+                    </div>
+                </div>
+                <p x-show="deadlineAt" class="text-[11px] text-slate-400 -mt-2 px-1" x-text="deadlinePreview"></p>
+                <div>
+                    <label class="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-2">Deadline Notes <span class="text-slate-300">(optional)</span></label>
+                    <input type="text" x-model="deadlineNotes" placeholder="e.g. Client presentation, launch day" class="w-full py-3 px-3.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 outline-none bg-white placeholder:text-slate-300">
+                </div>
             </div>
 
             {{-- Submit --}}
@@ -800,8 +929,23 @@
         <div class="px-4 pb-2">
             <p class="text-xs text-slate-500 leading-relaxed">{{ $overloadWarning['message'] ?? 'You have too many tasks today.' }}</p>
         </div>
+        @if(!empty($overloadWarning['auto_deferred']))
+        <div class="px-4 pb-2">
+            <p class="text-[10px] font-bold text-green-700 uppercase tracking-wider mb-1.5">✅ Auto-deferred (far-off deadlines)</p>
+            <div class="space-y-1">
+                @foreach($overloadWarning['auto_deferred'] as $ad)
+                <div class="flex items-center justify-between gap-2" x-data="{ undone: false }" x-show="!undone">
+                    <span class="text-xs text-slate-600 truncate flex-1">{{ $ad['title'] }} <span class="text-slate-400">· due {{ $ad['due_date'] }} ({{ $ad['days_out'] }}d)</span></span>
+                    <button @click="fetch('{{ url('admin/api/tasks') }}/{{ $ad['id'] }}/status', { method: 'PATCH', headers: {'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}','Accept':'application/json'}, body: JSON.stringify({status:'backlog'}) }).then(() => { undone = true; window.location.reload(); })"
+                        class="text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer whitespace-nowrap border-0 bg-transparent">Undo ↩</button>
+                </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
         @if(!empty($overloadWarning['defer_suggestions']))
         <div class="px-4 pb-3 space-y-1.5">
+            <p class="text-[10px] font-bold text-orange-700 uppercase tracking-wider mb-1">💡 AI suggests deferring</p>
             @foreach($overloadWarning['defer_suggestions'] as $deferTitle)
                 @php $deferTask = $plan->tasks()->where('title', $deferTitle)->whereIn('status', ['backlog', 'wip'])->first(); @endphp
                 @if($deferTask)
@@ -828,6 +972,7 @@
     const CSRF = '{{ csrf_token() }}';
     const PLAN_ID = {{ $plan->id }};
     const API = {
+        base: '{{ url("admin/api/tasks") }}',
         store: '{{ route("admin.api.tasks.store") }}',
         complete: id => '{{ url("admin/api/tasks") }}/' + id + '/complete',
         defer: id => '{{ url("admin/api/tasks") }}/' + id + '/defer',
@@ -846,6 +991,32 @@
         deferred: { label: 'Deferred', color: '#964219', bg: '#96421922', emoji: '⏭️' },
     };
     const STATUS_CYCLE = { backlog: 'wip', wip: 'done', done: 'backlog', deferred: 'backlog' };
+
+    function tbcbPill(task) {
+        return {
+            open: false,
+            isOverdue(dateStr) {
+                if (!dateStr) return false;
+                return new Date(dateStr.substring(0, 10) + 'T23:59:59') < new Date();
+            },
+            fmtDate(dateStr) {
+                if (!dateStr) return '';
+                const d = new Date(dateStr.substring(0, 10) + 'T00:00:00');
+                return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+            },
+            async setTbcb(task, val) {
+                const res = await fetch(API.base + '/' + task.id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
+                    body: JSON.stringify({ due_date: val || null })
+                });
+                if (res.ok) {
+                    task.due_date = val || null;
+                    this.open = false;
+                }
+            }
+        };
+    }
 
     function taskList() {
         return {
@@ -1123,7 +1294,21 @@
             blockId: '',
             pillar: '',
             minutes: '',
+            taskType: 'daily',
+            startDate: new Date().toISOString().split('T')[0],
+            deadlineAt: '',
+            deadlineNotes: '',
             pulledIds: [],
+
+            get deadlinePreview() {
+                if (!this.deadlineAt) return '';
+                const d = new Date(this.deadlineAt);
+                const diff = Math.round((d - new Date()) / 86400000);
+                if (diff < 0)  return '⚠️ This date is in the past';
+                if (diff === 0) return '📅 Due today';
+                if (diff === 1) return '📅 Due tomorrow';
+                return '📅 Due in ' + diff + ' days — ' + d.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long' }) + ' at ' + d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+            },
 
             priorityBg(p) {
                 return p === 'must' ? '#ef4444' : p === 'bonus' ? '#22c55e' : '#f59e0b';
@@ -1152,10 +1337,17 @@
                     daily_plan_id: PLAN_ID,
                     title: this.title.trim(),
                     priority: this.priority,
-                    time_block_id: this.blockId || null,
                     pillar: this.pillar || null,
-                    estimated_minutes: this.minutes ? parseInt(this.minutes) : null,
+                    task_type: this.taskType,
                 };
+                if (this.taskType === 'daily') {
+                    body.time_block_id = this.blockId || null;
+                    body.estimated_minutes = this.minutes ? parseInt(this.minutes) : null;
+                } else {
+                    body.start_date = this.startDate || null;
+                    body.deadline_at = this.deadlineAt || null;
+                    body.deadline_notes = this.deadlineNotes || null;
+                }
                 const res = await fetch(API.store, {
                     method: 'POST',
                     headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF,'Accept':'application/json'},
@@ -1163,16 +1355,25 @@
                 });
                 if (res.ok) {
                     const task = await res.json();
-                    const tl = document.querySelector('[x-data="taskList()"]');
-                    if (tl) {
-                        const data = Alpine.$data(tl);
-                        if (data && data.addTask) data.addTask(task);
+                    if (this.taskType === 'daily') {
+                        const tl = document.querySelector('[x-data="taskList()"]');
+                        if (tl) {
+                            const data = Alpine.$data(tl);
+                            if (data && data.addTask) data.addTask(task);
+                        }
+                    } else {
+                        // Reload to show project task in the project tasks section
+                        window.location.reload();
                     }
                     this.title = '';
                     this.priority = 'should';
                     this.blockId = '';
                     this.pillar = '';
                     this.minutes = '';
+                    this.taskType = 'daily';
+                    this.startDate = new Date().toISOString().split('T')[0];
+                    this.deadlineAt = '';
+                    this.deadlineNotes = '';
                     this.open = false;
                 }
             }

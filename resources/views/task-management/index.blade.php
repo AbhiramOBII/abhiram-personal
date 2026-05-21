@@ -88,24 +88,49 @@
                 </div>
             </div>
 
-            {{-- Range filter --}}
+            {{-- Type filter --}}
+            <div style="display: flex; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb;">
+                @foreach(['' => 'All', 'daily' => '⚡ Daily', 'project' => '🗂️ Project'] as $key => $label)
+                    <a href="{{ route('admin.tasks.index', ['range' => $range, 'pillar' => $pillar, 'status' => $status, 'type' => $key]) }}"
+                       style="padding: 8px 12px; font-size: 12px; font-weight: 500; text-decoration: none; transition: all 0.15s;
+                       {{ ($type ?? '') === $key ? 'background: #1e293b; color: #fff;' : 'background: #fff; color: #64748b;' }}">
+                        {{ $label }}
+                    </a>
+                @endforeach
+            </div>
+            {{-- Range filter (hidden for project view) --}}
+            @if(($type ?? '') !== 'project')
             <div style="display: flex; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb;">
                 @foreach(['week' => 'This Week', '7days' => 'Last 7 Days', 'month' => 'This Month'] as $key => $label)
-                    <a href="{{ route('admin.tasks.index', ['range' => $key, 'pillar' => $pillar]) }}"
+                    <a href="{{ route('admin.tasks.index', ['range' => $key, 'pillar' => $pillar, 'status' => $status, 'type' => $type]) }}"
                        style="padding: 8px 12px; font-size: 12px; font-weight: 500; text-decoration: none; transition: all 0.15s;
                        {{ $range === $key ? 'background: #1e293b; color: #fff;' : 'background: #fff; color: #64748b;' }}">
                         {{ $label }}
                     </a>
                 @endforeach
             </div>
+            @endif
             {{-- Pillar filter --}}
-            <select onchange="window.location.href='{{ route('admin.tasks.index') }}?range={{ $range }}&pillar=' + this.value"
+            <select onchange="window.location.href='{{ route('admin.tasks.index') }}?range={{ $range }}&pillar=' + this.value + '&status={{ $status }}&type={{ $type }}'"
                     style="padding: 8px 12px; border-radius: 8px; border: 1px solid #e5e7eb; font-size: 12px; color: #1e293b; background: #fff; outline: none;">
                 <option value="">All Pillars</option>
                 @foreach($pillarList as $p)
                     <option value="{{ $p }}" {{ $pillar === $p ? 'selected' : '' }}>{{ ucfirst($p) }}</option>
                 @endforeach
             </select>
+            {{-- Status filter --}}
+            <div style="display: flex; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb;">
+                <a href="{{ route('admin.tasks.index', ['range' => $range, 'pillar' => $pillar, 'type' => $type]) }}"
+                   style="padding: 8px 10px; font-size: 11px; font-weight: 500; text-decoration: none; transition: all 0.15s;
+                   {{ !$status ? 'background: #1e293b; color: #fff;' : 'background: #fff; color: #64748b;' }}">All</a>
+                @foreach($statusConfig as $key => $cfg)
+                    <a href="{{ route('admin.tasks.index', ['range' => $range, 'pillar' => $pillar, 'status' => $key, 'type' => $type]) }}"
+                       style="padding: 8px 10px; font-size: 11px; font-weight: 500; text-decoration: none; transition: all 0.15s;
+                       {{ $status === $key ? 'background: ' . $cfg['color'] . '; color: #fff;' : 'background: #fff; color: ' . $cfg['color'] . ';' }}">
+                        {{ $cfg['emoji'] }} {{ $cfg['label'] }}
+                    </a>
+                @endforeach
+            </div>
         </div>
     </div>
 
@@ -138,8 +163,69 @@
         </div>
     @endif
 
+    {{-- Project Timeline View --}}
+    @if(($type ?? '') === 'project' && $projectTimeline->isNotEmpty())
+    <div style="margin-bottom: 24px;">
+        @php
+            $proximityLabels = ['overdue' => ['💀 Overdue', '#a12c7b'], '0d' => ['🔴 Due Today', '#a13544'], '1d' => ['🟠 Due Tomorrow', '#da7101'], '3d' => ['🟡 Due Soon (2-3 days)', '#d19900']];
+        @endphp
+        @foreach($proximityLabels as $pKey => $pInfo)
+            @if($projectTimeline->has($pKey))
+            <div style="margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 0 2px;">
+                    <span style="font-size: 14px; font-weight: 700; color: {{ $pInfo[1] }};">{{ $pInfo[0] }}</span>
+                    <span style="font-size: 11px; color: #94a3b8;">{{ $projectTimeline[$pKey]->count() }} tasks</span>
+                </div>
+                <div class="admin-card" style="overflow: visible; border-radius: 12px; border-left: 3px solid {{ $pInfo[1] }};">
+                    @foreach($projectTimeline[$pKey] as $task)
+                        @php $sc = $task->statusConfig; @endphp
+                        <div style="padding: 12px 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #f8fafc;">
+                            <span style="padding: 2px 6px; border-radius: 5px; font-size: 10px; font-weight: 600; white-space: nowrap; background: {{ $sc['bg'] }}; color: {{ $sc['color'] }};">{{ $sc['emoji'] }}</span>
+                            <span style="width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: {{ $task->priority === 'must' ? '#ef4444' : ($task->priority === 'bonus' ? '#22c55e' : '#f59e0b') }};"></span>
+                            <span style="flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $task->title }}</span>
+                            @if($task->deadline_at)
+                                <span style="font-size: 10px; font-weight: 600; white-space: nowrap; padding: 2px 6px; border-radius: 4px; background: {{ $pInfo[1] }}18; color: {{ $pInfo[1] }};">{{ $task->deadline_at->format('d M, g:i A') }}</span>
+                            @endif
+                            @if($task->pillar)
+                                @php $pc = $pillarColors[$task->pillar] ?? 'gray'; @endphp
+                                <span class="bg-{{ $pc }}-100 text-{{ $pc }}-700 border border-{{ $pc }}-200" style="padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; white-space: nowrap;">{{ $task->pillar }}</span>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+            @endif
+        @endforeach
+
+        {{-- Project tasks without urgent deadline --}}
+        @if($projectTimeline->has(''))
+        <div style="margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 0 2px;">
+                <span style="font-size: 14px; font-weight: 700; color: #64748b;">📋 No Urgent Deadline</span>
+                <span style="font-size: 11px; color: #94a3b8;">{{ $projectTimeline['']->count() }} tasks</span>
+            </div>
+            <div class="admin-card" style="overflow: visible; border-radius: 12px;">
+                @foreach($projectTimeline[''] as $task)
+                    @php $sc = $task->statusConfig; @endphp
+                    <div style="padding: 12px 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #f8fafc;">
+                        <span style="padding: 2px 6px; border-radius: 5px; font-size: 10px; font-weight: 600; white-space: nowrap; background: {{ $sc['bg'] }}; color: {{ $sc['color'] }};">{{ $sc['emoji'] }}</span>
+                        <span style="flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $task->title }}</span>
+                        @if($task->deadline_at)
+                            <span style="font-size: 10px; font-weight: 600; white-space: nowrap; padding: 2px 6px; border-radius: 4px; background: #f1f5f9; color: #64748b;">{{ $task->deadline_at->format('d M') }}</span>
+                        @else
+                            <span style="font-size: 10px; color: #94a3b8;">No deadline</span>
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
+    </div>
+    @endif
+
     {{-- Task list grouped by date --}}
     @forelse($grouped as $date => $tasks)
+        @if($date === 'no-plan') @continue @endif
         @php
             $dateObj = \Carbon\Carbon::parse($date);
             $dayPlan = $tasks->first()?->dailyPlan;
@@ -160,15 +246,19 @@
                 @foreach($tasks as $task)
                     <div style="padding: 12px 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #f8fafc;
                         {{ $task->is_rolled_over ? 'border-left: 3px solid #f59e0b;' : '' }}
-                        {{ $task->is_completed ? 'opacity: 0.45;' : '' }}"
+                        {{ $task->status === 'done' ? 'opacity: 0.45;' : '' }}"
                          x-data="{ editing: false, title: '{{ addslashes($task->title) }}' }">
+
+                        {{-- Status badge --}}
+                        @php $sc = $task->statusConfig; @endphp
+                        <span style="padding: 2px 6px; border-radius: 5px; font-size: 10px; font-weight: 600; white-space: nowrap; background: {{ $sc['bg'] }}; color: {{ $sc['color'] }};">{{ $sc['emoji'] }}</span>
 
                         {{-- Priority dot --}}
                         <span style="width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: {{ $task->priority === 'must' ? '#ef4444' : ($task->priority === 'bonus' ? '#22c55e' : '#f59e0b') }};"></span>
 
                         {{-- Title (inline edit) --}}
                         <template x-if="!editing">
-                            <span @click="editing = true" style="flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: #1e293b; cursor: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; {{ $task->is_completed ? 'text-decoration: line-through;' : '' }}" x-text="title"></span>
+                            <span @click="editing = true" style="flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: #1e293b; cursor: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; {{ $task->status === 'done' ? 'text-decoration: line-through;' : '' }}" x-text="title"></span>
                         </template>
                         <template x-if="editing">
                             <input type="text" x-model="title"
@@ -184,10 +274,37 @@
                             <span class="bg-{{ $pc }}-100 text-{{ $pc }}-700 border border-{{ $pc }}-200" style="padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; white-space: nowrap;">{{ $task->pillar }}</span>
                         @endif
 
-                        {{-- Due date --}}
-                        @if($task->due_date)
-                            <span style="font-size: 10px; font-weight: 600; white-space: nowrap; padding: 2px 6px; border-radius: 4px; {{ $task->isOverdue() ? 'background: #fef2f2; color: #dc2626;' : 'background: #f1f5f9; color: #64748b;' }}">{{ $task->due_date->format('j M') }}</span>
-                        @endif
+                        {{-- TBCB (To Be Completed By) --}}
+                        <div x-data="{ tbcbOpen: false, tbcbDate: '{{ $task->due_date ? $task->due_date->format('Y-m-d') : '' }}' }" style="position: relative; display: inline-flex;">
+                            <button @click="tbcbOpen = !tbcbOpen"
+                                    style="padding: 2px 7px; border-radius: 6px; font-size: 10px; font-weight: 700; white-space: nowrap; border: 1px solid {{ $task->due_date ? ($task->isOverdue() ? '#fca5a5' : '#c7d2fe') : '#e5e7eb' }}; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; transition: all 0.15s;
+                                    {{ $task->due_date ? ($task->isOverdue() ? 'background: #fef2f2; color: #dc2626;' : 'background: #eef2ff; color: #4f46e5;') : 'background: #f8fafc; color: #94a3b8;' }}"
+                                    title="To Be Completed By">
+                                <svg style="width: 10px; height: 10px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                <span x-text="tbcbDate ? 'TBCB ' + new Date(tbcbDate + 'T00:00:00').toLocaleDateString('en-IN', {day:'numeric', month:'short'}) : 'TBCB'"></span>
+                            </button>
+                            <div x-show="tbcbOpen" x-cloak @click.outside="tbcbOpen = false"
+                                 style="position: absolute; right: 0; top: 26px; z-index: 50; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 10px; min-width: 170px;">
+                                <p style="font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.6px; margin: 0 0 6px 2px;">To Be Completed By</p>
+                                <input type="date" x-model="tbcbDate"
+                                       style="width: 100%; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 8px; color: #1e293b; outline: none; cursor: pointer;"
+                                       @change="
+                                           fetch('{{ url('admin/api/tasks') }}/{{ $task->id }}', {
+                                               method: 'PATCH',
+                                               headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                                               body: JSON.stringify({ due_date: $event.target.value || null })
+                                           }).then(r => { if(r.ok) tbcbOpen = false; });
+                                       ">
+                                <button x-show="tbcbDate" @click="
+                                    tbcbDate = '';
+                                    fetch('{{ url('admin/api/tasks') }}/{{ $task->id }}', {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                                        body: JSON.stringify({ due_date: null })
+                                    }).then(r => { if(r.ok) tbcbOpen = false; });
+                                " style="width: 100%; margin-top: 6px; padding: 4px; border-radius: 6px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; font-size: 10px; font-weight: 600; cursor: pointer;">Clear date</button>
+                            </div>
+                        </div>
 
                         {{-- Rollover badge --}}
                         @if($task->is_rolled_over)
@@ -247,9 +364,9 @@
                         <template x-if="expanded[{{ $task->id }}]">
                             <div style="padding-left: 32px; background: #fafbfc;">
                                 @foreach($task->subTasks as $sub)
-                                    <div style="padding: 8px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #f1f5f9; {{ $sub->is_completed ? 'opacity: 0.45;' : '' }}">
+                                    <div style="padding: 8px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #f1f5f9; {{ $sub->status === 'done' ? 'opacity: 0.45;' : '' }}">
                                         <span style="width: 6px; height: 6px; border-radius: 50%; background: {{ $sub->priority === 'must' ? '#ef4444' : ($sub->priority === 'bonus' ? '#22c55e' : '#f59e0b') }};"></span>
-                                        <span style="flex: 1; font-size: 13px; color: #475569; {{ $sub->is_completed ? 'text-decoration: line-through;' : '' }}">{{ $sub->title }}</span>
+                                        <span style="flex: 1; font-size: 13px; color: #475569; {{ $sub->status === 'done' ? 'text-decoration: line-through;' : '' }}">{{ $sub->title }}</span>
                                     </div>
                                 @endforeach
                             </div>

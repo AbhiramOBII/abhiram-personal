@@ -60,7 +60,7 @@ class NudgeService
         };
 
         $plan = DailyPlan::today();
-        $taskCount = $plan->tasks()->where('is_completed', false)->count();
+        $taskCount = $plan->tasks()->whereIn('status', ['backlog', 'wip'])->count();
         $practiceCount = PracticeLog::where('logged_date', now()->toDateString())
             ->where('is_completed', false)->count();
 
@@ -183,7 +183,7 @@ class NudgeService
         $plan = DailyPlan::today();
         $worstOffender = $plan->tasks()
             ->where('rollover_count', '>=', 3)
-            ->where('is_completed', false)
+            ->whereIn('status', ['backlog', 'wip'])
             ->orderByDesc('rollover_count')
             ->first();
 
@@ -278,7 +278,7 @@ class NudgeService
     {
         $plan = DailyPlan::today();
         $overdueTask = $plan->tasks()
-            ->where('is_completed', false)
+            ->whereIn('status', ['backlog', 'wip'])
             ->whereDate('due_date', now()->toDateString())
             ->orderByDesc('priority')
             ->first();

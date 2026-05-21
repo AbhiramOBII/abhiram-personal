@@ -20,7 +20,9 @@ class WeeklyReviewService
         $planIds = DailyPlan::whereBetween('plan_date', [$start, $end])->pluck('id');
 
         $tasksPlanned = Task::whereIn('daily_plan_id', $planIds)->count();
-        $tasksCompleted = Task::whereIn('daily_plan_id', $planIds)->where('is_completed', true)->count();
+        $tasksCompleted = Task::whereIn('daily_plan_id', $planIds)->where('status', 'done')->count();
+        $tasksWip = Task::whereIn('daily_plan_id', $planIds)->where('status', 'wip')->count();
+        $tasksDeferred = Task::whereIn('daily_plan_id', $planIds)->where('status', 'deferred')->count();
         $tasksRolledOver = Task::whereIn('daily_plan_id', $planIds)->where('is_rolled_over', true)->count();
         $completionRate = $tasksPlanned > 0 ? (int) round(($tasksCompleted / $tasksPlanned) * 100) : 0;
 
@@ -34,7 +36,7 @@ class WeeklyReviewService
         $upskillSessions = LearningSession::whereBetween('session_date', [$start, $end])->count();
 
         $pillarBreakdown = Task::whereIn('daily_plan_id', $planIds)
-            ->where('is_completed', true)
+            ->where('status', 'done')
             ->whereNotNull('pillar')
             ->selectRaw('pillar, count(*) as cnt')
             ->groupBy('pillar')
@@ -62,10 +64,28 @@ class WeeklyReviewService
             ->map(fn($t) => ['id' => $t->id, 'title' => $t->title, 'rollover_count' => $t->rollover_count])
             ->toArray();
 
+        // Project task stats for the week
+        $projectTasksTotal = Task::project()
+            ->where('start_date', '<=', $end)
+            ->where(function ($q) use ($start) {
+                $q->whereNull('deadline_at')->orWhere('deadline_at', '>=', $start);
+            })->count();
+        $projectTasksCompleted = Task::project()->where('status', 'done')
+            ->whereNotNull('completed_at')
+            ->whereBetween('completed_at', [$start, Carbon::parse($end)->endOfDay()])
+            ->count();
+        $projectTasksOverdue = Task::project()
+            ->whereIn('status', ['backlog', 'wip'])
+            ->whereNotNull('deadline_at')
+            ->where('deadline_at', '<', $end)
+            ->count();
+
         return [
             'tasks_planned' => $tasksPlanned,
             'tasks_completed' => $tasksCompleted,
             'tasks_rolled_over' => $tasksRolledOver,
+            'tasks_wip' => $tasksWip,
+            'tasks_deferred' => $tasksDeferred,
             'completion_rate' => $completionRate,
             'practices_possible' => $practicesPossible,
             'practices_completed' => $practicesCompleted,
@@ -78,6 +98,9 @@ class WeeklyReviewService
             'worst_day' => $worstDay,
             'top_practice_streak' => $topPracticeStreak,
             'rollover_offenders' => $rolloverOffenders,
+            'project_tasks_total' => $projectTasksTotal,
+            'project_tasks_completed' => $projectTasksCompleted,
+            'project_tasks_overdue' => $projectTasksOverdue,
         ];
     }
 

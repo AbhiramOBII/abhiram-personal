@@ -30,7 +30,7 @@ class AIService
         $energyLabel = $workingDay?->energyLabel() ?? 'Medium Energy';
         $tasks = $plan->tasks;
         $totalTasks = $tasks->count();
-        $pendingTasks = $tasks->where('is_completed', false)->count();
+        $pendingTasks = $tasks->whereIn('status', ['backlog', 'wip'])->count();
         $rolloverCount = $tasks->where('is_rolled_over', true)->count();
 
         $practiceLogs = PracticeLog::where('logged_date', $today)->get();
@@ -76,7 +76,7 @@ class AIService
 
         $workingDay = $plan->workingDay;
         $themeName = $workingDay?->theme ?? 'Focus Day';
-        $pendingTasks = $plan->tasks()->where('is_completed', false)->pluck('title')->toArray();
+        $pendingTasks = $plan->tasks()->whereIn('status', ['backlog', 'wip'])->pluck('title')->toArray();
         $rolloverTasks = $plan->tasks()->where('is_rolled_over', true)->get()->map(fn($t) => "{$t->title} (rolled {$t->rollover_count}x)")->toArray();
 
         $timeBlocks = $workingDay?->timeBlocks()
@@ -116,44 +116,84 @@ class AIService
 
     public function getOverloadGuard(DailyPlan $plan, bool $bustCache = false): ?array
     {
-        $pendingTasks = $plan->tasks()->where('is_completed', false)->get();
-
-        if ($pendingTasks->count() <= 8) return null;
-
+        $pendingTasks = $plan->tasks()->whereIn('status', ['backlog', 'wip'])->get();
         $today = now()->toDateString();
+
+        // ── Auto-defer FIRST — always runs, no cache skip ──
+        $autoDeferred = [];
+        foreach ($pendingTasks as $task) {
+            if (!$task->due_date) continue;
+            if ($task->priority === 'must') continue;
+            if ($task->status === 'deferred') continue;
+            $daysUntilDue = (int) now()->startOfDay()->diffInDays($task->due_date, false);
+            if ($daysUntilDue >= 3) {
+                $task->update(['status' => 'deferred']);
+                $autoDeferred[] = [
+                    'id'       => $task->id,
+                    'title'    => $task->title,
+                    'due_date' => $task->due_date->format('j M'),
+                    'days_out' => $daysUntilDue,
+                ];
+            }
+        }
+
+        // Refresh after auto-defer
+        $pendingTasks = $plan->tasks()->whereIn('status', ['backlog', 'wip'])->get();
+
+        // If auto-deferred tasks exist, bust the AI cache so it re-evaluates
+        if (!empty($autoDeferred)) $bustCache = true;
+
+        // Only run AI overload if still over threshold
+        if ($pendingTasks->count() <= 8 && empty($autoDeferred)) return null;
 
         if (!$bustCache) {
             $cached = AIOutput::getCached('overload_guard', $today);
             if ($cached && $cached->meta) return $cached->meta;
         }
 
-        $systemPrompt = 'You are a workload advisor. Analyze the task list and identify the 2-3 tasks most worth deferring to tomorrow. Return JSON: { "overloaded": true, "message": "string max 100 chars", "defer_suggestions": ["task title 1", "task title 2"] }. Return only valid JSON.';
+        // ── AI suggestions for remaining tasks ──
+        $parsed = ['overloaded' => false];
 
-        $taskList = $pendingTasks->map(fn($t) => "{$t->title} (priority: {$t->priority}, est: {$t->estimated_minutes}min)")->implode('; ');
+        if ($pendingTasks->count() > 8) {
+            $systemPrompt = 'You are a workload advisor for Abhiram. Analyze the task list and identify the 2-3 tasks most worth deferring to tomorrow. Prioritise deferring low-priority tasks and tasks with far-off due dates. Return JSON: { "overloaded": true, "message": "string max 100 chars", "defer_suggestions": ["task title 1", "task title 2"] }. Return only valid JSON.';
 
-        $userPrompt = "Today's pending tasks ({$pendingTasks->count()} total): {$taskList}";
+            $taskList = $pendingTasks->map(function ($t) {
+                $info = "{$t->title} (priority: {$t->priority}, est: {$t->estimated_minutes}min";
+                if ($t->due_date) {
+                    $daysOut = (int) now()->startOfDay()->diffInDays($t->due_date, false);
+                    $info .= ", due: {$t->due_date->format('j M')} ({$daysOut}d away)";
+                }
+                return $info . ')';
+            })->implode('; ');
 
-        $response = $this->callOpenAI($systemPrompt, $userPrompt, 'overload_guard', [
-            'max_tokens' => 200,
-            'temperature' => 0.3,
-            'response_format' => ['type' => 'json_object'],
-        ]);
+            $response = $this->callOpenAI($systemPrompt, "Today's pending tasks ({$pendingTasks->count()} total): {$taskList}", 'overload_guard', [
+                'max_tokens' => 200,
+                'temperature' => 0.3,
+                'response_format' => ['type' => 'json_object'],
+            ]);
 
-        if (!$response) return null;
-
-        try {
-            $parsed = json_decode($response, true);
-            if (!($parsed['overloaded'] ?? false)) return null;
-
-            AIOutput::updateOrCreate(
-                ['feature' => 'overload_guard', 'context_date' => $today],
-                ['content' => $response, 'meta' => $parsed]
-            );
-
-            return $parsed;
-        } catch (\Throwable $e) {
-            return null;
+            if ($response) {
+                try { $parsed = json_decode($response, true); } catch (\Throwable $e) {}
+            }
         }
+
+        // Merge auto-deferred info
+        if (!empty($autoDeferred)) {
+            $parsed['overloaded'] = true;
+            $parsed['auto_deferred'] = $autoDeferred;
+            $parsed['message'] = ($parsed['message'] ?? '')
+                ? $parsed['message']
+                : count($autoDeferred) . ' task(s) with far-off deadlines auto-deferred to lighten your load.';
+        }
+
+        if (!($parsed['overloaded'] ?? false)) return null;
+
+        AIOutput::updateOrCreate(
+            ['feature' => 'overload_guard', 'context_date' => $today],
+            ['content' => json_encode($parsed), 'meta' => $parsed]
+        );
+
+        return $parsed;
     }
 
     public function getWeeklyInsight(WeeklyReview $review, bool $bustCache = false): string

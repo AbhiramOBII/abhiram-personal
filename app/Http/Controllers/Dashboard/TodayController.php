@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DailyPlan;
 use App\Models\Practice;
 use App\Models\PracticeLog;
+use App\Models\DeadlineAlert;
 use App\Models\Task;
 use App\Models\TimeBlock;
 use App\Models\LearningSession;
@@ -34,17 +35,18 @@ class TodayController extends Controller
             : collect();
 
         $tasks = $plan->tasks()->orderBy('sort_order')->get();
+        $visibleTasks = $tasks->where('status', '!=', 'deferred');
 
         $groupedTasks = [];
         foreach ($timeBlocks as $block) {
-            $groupedTasks[$block->id] = $tasks->where('time_block_id', $block->id)->values()->toArray();
+            $groupedTasks[$block->id] = $visibleTasks->where('time_block_id', $block->id)->values()->toArray();
         }
-        $groupedTasks['anytime'] = $tasks->whereNull('time_block_id')->values()->toArray();
+        $groupedTasks['anytime'] = $visibleTasks->whereNull('time_block_id')->values()->toArray();
 
         $currentBlock = TimeBlock::current();
-        $completed = $tasks->where('status', 'done')->count();
-        $total = $tasks->count();
-        $rolledOver = $tasks->where('is_rolled_over', true)->count();
+        $completed = $visibleTasks->where('status', 'done')->count();
+        $total = $visibleTasks->count();
+        $rolledOver = $visibleTasks->where('is_rolled_over', true)->count();
         $completionPct = $plan->completionPercentage();
 
         $practiceLogs = PracticeLog::where('logged_date', now()->toDateString())
@@ -52,10 +54,23 @@ class TodayController extends Controller
             ->get()
             ->sortBy(fn($l) => $l->practice->sort_order);
 
-        // Load practices separated by type
+        // Load practices separated by type — filter reflective by time + incomplete
+        $hour = (int) now()->format('H');
+        $currentSlot = match(true) {
+            $hour < 12 => 'morning',
+            $hour < 17 => 'afternoon',
+            default    => 'evening',
+        };
+
         $reflectivePractices = Practice::reflective()->active()->forToday()->with(['logs' => function($q) {
             $q->where('logged_date', today());
-        }])->orderBy('sort_order')->get();
+        }])->orderBy('sort_order')->get()
+            ->filter(fn ($p) => !($p->logs->first()?->response_text)) // hide answered
+            ->sortBy(function ($p) use ($currentSlot) {
+                // time-appropriate first, then anytime, then other slots
+                $pt = $p->preferred_time ?? 'anytime';
+                return $pt === $currentSlot ? 0 : ($pt === 'anytime' ? 1 : 2);
+            })->values();
 
         $behavioralPractices = Practice::behavioral()->active()->forToday()->with(['logs' => function($q) {
             $q->where('logged_date', today());
@@ -95,6 +110,29 @@ class TodayController extends Controller
             ->limit(30)
             ->get(['id', 'title', 'pillar', 'priority', 'estimated_minutes']);
 
+        // Project tasks — injected across all days from start to deadline
+        $projectTasks = Task::activeProjects()
+            ->with('deadlineAlerts')
+            ->orderByRaw("CASE
+                WHEN deadline_at IS NULL THEN 2
+                WHEN deadline_at <= NOW() + INTERVAL 1 DAY THEN 0
+                WHEN deadline_at <= NOW() + INTERVAL 3 DAY THEN 1
+                ELSE 2
+            END")
+            ->orderBy('deadline_at')
+            ->get();
+
+        // Overdue project tasks
+        $overdueProjects = Task::overdueProjects()->get();
+
+        // Today's deadline alerts (not dismissed)
+        $deadlineAlerts = DeadlineAlert::with('task')
+            ->where('alert_date', today())
+            ->where('is_dismissed', false)
+            ->whereHas('task', fn($q) => $q->whereIn('status', ['backlog', 'wip']))
+            ->orderByRaw("CASE alert_type WHEN 'overdue' THEN 0 WHEN '0d' THEN 1 WHEN '1d' THEN 2 ELSE 3 END")
+            ->get();
+
         $nudges = $nudgeService->getActiveNudges();
         $hasNudges = count($nudges) > 0;
 
@@ -127,6 +165,9 @@ class TodayController extends Controller
             'overloadWarning',
             'dailyQuote',
             'pendingTasks',
+            'projectTasks',
+            'overdueProjects',
+            'deadlineAlerts',
         ));
     }
 }

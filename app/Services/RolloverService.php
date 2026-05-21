@@ -18,10 +18,14 @@ class RolloverService
 
         $todayPlan = DailyPlan::today();
 
+        // Only roll over daily tasks — project tasks appear via activeProjects() scope
         $incompleteTasks = $yesterdayPlan->tasks()
-            ->where('is_completed', false)
+            ->whereIn('status', ['backlog', 'wip'])
             ->whereNull('archived_at')
             ->whereNull('parent_task_id')
+            ->where(function ($q) {
+                $q->where('task_type', 'daily')->orWhereNull('task_type');
+            })
             ->get();
 
         foreach ($incompleteTasks as $task) {
@@ -35,6 +39,7 @@ class RolloverService
                 'pillar' => $task->pillar,
                 'priority' => $newCount >= 3 ? 'must' : $task->priority,
                 'estimated_minutes' => $task->estimated_minutes,
+                'status' => 'backlog',
                 'is_completed' => false,
                 'completed_at' => null,
                 'is_rolled_over' => true,
