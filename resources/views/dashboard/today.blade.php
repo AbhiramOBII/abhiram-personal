@@ -4,6 +4,7 @@
 
 @push('head')
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
 <style>
     .today-header::before {
         content: '';
@@ -123,6 +124,14 @@
             <div class="text-right pt-1">
                 <p class="text-sm font-semibold text-slate-800">{{ now()->format('l') }}</p>
                 <p class="text-[11px] text-slate-400 mt-0.5 tracking-wide">{{ now()->format('j F Y') }}</p>
+                {{-- Sync indicator --}}
+                <div x-data="syncIndicator()" class="flex items-center justify-end gap-1.5 mt-1.5">
+                    <span x-show="syncPulse" x-transition class="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
+                    <span x-show="lastSyncedAt" x-text="'Synced ' + lastSyncedAt" class="text-[10px] text-slate-400"></span>
+                    <button @click="manualRefresh()" title="Refresh data" class="text-slate-400 hover:text-slate-600 p-0.5 leading-none border-0 bg-transparent cursor-pointer">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -190,6 +199,23 @@
             <div x-ref="bar" class="h-full rounded-full transition-all duration-[1200ms] ease-out" style="background: linear-gradient(90deg, {{ $hex }}, {{ $hex }}aa); width: 0%;"
                  x-init="setTimeout(() => $refs.bar.style.width = pct + '%', 200)"></div>
         </div>
+    </div>
+
+    {{-- ═══════════════════════════════════════════════
+         Plan My Day Buttons
+    ═══════════════════════════════════════════════ --}}
+    <div class="flex items-center gap-2 mb-6">
+        <button @click="planDay()" :disabled="planning"
+                class="px-4 py-2.5 rounded-xl text-xs font-semibold text-white border-0 cursor-pointer transition-all hover:shadow-md flex items-center gap-2"
+                :class="planning ? 'opacity-60 cursor-not-allowed' : ''"
+                style="background: linear-gradient(135deg, {{ $hex }}, {{ $hex }}cc);">
+            <span x-show="!planning">🧠 Plan My Day</span>
+            <span x-show="planning">Planning...</span>
+        </button>
+        <button @click="autoSort()"
+                class="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200 bg-white cursor-pointer transition-all hover:bg-slate-50 hover:shadow-sm flex items-center gap-2">
+            ↕ Sort by Value
+        </button>
     </div>
 
     {{-- ═══════════════════════════════════════════════
@@ -508,7 +534,8 @@
                 <div class="task-group bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow min-h-[4px] overflow-hidden" data-block-id="{{ $block->id }}">
                     <template x-for="task in sortedGroup('{{ $block->id }}')" :key="task.id">
                         <div class="border-b border-slate-100 last:border-b-0" :data-task-id="task.id" data-task-card>
-                            <div class="flex items-center gap-3 px-4 py-3.5 bg-white relative transition-all cursor-pointer active:bg-slate-50"
+                            {{-- Desktop: single row --}}
+                            <div class="hidden md:flex items-center gap-3 px-4 py-3.5 bg-white relative transition-all cursor-pointer active:bg-slate-50"
                                  :style="(task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.status === 'done' ? 'opacity:0.4;' : '')"
                                  :class="task.status === 'wip' && 'wip-pulse'"
                                  @click="openTaskAction(task)">
@@ -523,6 +550,10 @@
                                 <template x-if="task.is_rolled_over">
                                     <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-100 text-amber-800 whitespace-nowrap">↩ <span x-text="task.rollover_count"></span></span>
                                 </template>
+                                <span x-show="task.value_score > 0"
+                                      class="rounded-full px-1.5 py-0.5 font-mono font-semibold shrink-0"
+                                      :style="'font-size:10px;background:' + scoreBadgeBg(task.value_score) + ';color:' + scoreBadgeColor(task.value_score) + ';'"
+                                      x-text="'VS·' + task.value_score"></span>
                                 <span class="shrink-0" @click.stop>
                                     <span x-data="tbcbPill(task)" class="relative inline-flex">
                                         <button @click="open = !open"
@@ -543,6 +574,54 @@
                                     </span>
                                 </span>
                             </div>
+                            {{-- Mobile: 3-row card --}}
+                            <div class="md:hidden px-3 py-3 bg-white relative transition-all cursor-pointer active:bg-slate-50"
+                                 :style="(task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.status === 'done' ? 'opacity:0.4;' : '')"
+                                 @click="openTaskAction(task)">
+                                {{-- Row 1: Drag, Status pill, VS pill, Rollover pill, Priority --}}
+                                <div class="flex items-center gap-2 mb-2">
+                                    <div class="drag-handle cursor-grab text-slate-300 shrink-0 touch-none" @click.stop>
+                                        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+                                    </div>
+                                    <span class="px-3 py-1 rounded-full text-[11px] font-bold shrink-0"
+                                          :style="'background:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).bg + ';color:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).color"
+                                          x-text="task.status === 'wip' ? 'WIP' : (task.status === 'done' ? 'Done' : (task.status === 'deferred' ? 'Deferred' : 'Backlog'))"></span>
+                                    <span x-show="task.value_score > 0"
+                                          class="px-2.5 py-1 rounded-full font-mono font-bold shrink-0 text-[11px]"
+                                          :style="'background:' + scoreBadgeBg(task.value_score) + ';color:' + scoreBadgeColor(task.value_score) + ';'"
+                                          x-text="'VS·' + task.value_score"></span>
+                                    <template x-if="task.is_rolled_over">
+                                        <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 whitespace-nowrap">↩<span x-text="task.rollover_count"></span></span>
+                                    </template>
+                                    <span class="w-2.5 h-2.5 rounded-full shrink-0 ml-auto" :style="'background:' + priorityColor(task.priority)"></span>
+                                </div>
+                                {{-- Row 2: Full title --}}
+                                <p class="text-[15px] font-semibold text-slate-800 leading-snug pl-6 mb-2"
+                                   :class="task.status === 'done' && 'line-through !text-slate-400'" x-text="task.title"></p>
+                                {{-- Row 3: TBCB pill + Pillar --}}
+                                <div class="pl-6 flex items-center gap-2" @click.stop>
+                                    <span x-data="tbcbPill(task)" class="relative inline-flex">
+                                        <button @click="open = !open"
+                                                class="px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap inline-flex items-center gap-1.5 border cursor-pointer transition-all"
+                                                :class="task.due_date ? (isOverdue(task.due_date) ? 'bg-red-50 text-red-600 border-red-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200') : 'bg-slate-100 text-slate-400 border-slate-200'">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                            <span x-text="task.due_date ? 'TBCB ' + fmtDate(task.due_date) : 'TBCB'"></span>
+                                        </button>
+                                        <div x-show="open" x-cloak @click.outside="open = false"
+                                             class="absolute left-0 top-8 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-2.5" style="min-width: 160px;">
+                                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-0.5">Complete by</p>
+                                            <input type="date" :value="task.due_date ? task.due_date.substring(0,10) : ''"
+                                                   class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 outline-none"
+                                                   @change="setTbcb(task, $event.target.value)">
+                                            <button x-show="task.due_date" @click="setTbcb(task, null)"
+                                                    class="w-full mt-1.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-600 text-[10px] font-semibold cursor-pointer">Clear</button>
+                                        </div>
+                                    </span>
+                                    <template x-if="task.pillar">
+                                        <span class="px-3 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600" x-text="task.pillar"></span>
+                                    </template>
+                                </div>
+                            </div>
                         </div>
                     </template>
                 </div>
@@ -559,7 +638,8 @@
             <div class="task-group bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow min-h-[4px] overflow-hidden" data-block-id="anytime">
                 <template x-for="task in sortedGroup('anytime')" :key="task.id">
                     <div class="border-b border-slate-100 last:border-b-0" :data-task-id="task.id" data-task-card>
-                        <div class="flex items-center gap-3 px-4 py-3.5 bg-white relative transition-all cursor-pointer active:bg-slate-50"
+                        {{-- Desktop: single row --}}
+                        <div class="hidden md:flex items-center gap-3 px-4 py-3.5 bg-white relative transition-all cursor-pointer active:bg-slate-50"
                              :style="(task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.status === 'done' ? 'opacity:0.4;' : '')"
                              :class="task.status === 'wip' && 'wip-pulse'"
                              @click="openTaskAction(task)">
@@ -574,6 +654,10 @@
                             <template x-if="task.is_rolled_over">
                                 <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-100 text-amber-800 whitespace-nowrap">↩ <span x-text="task.rollover_count"></span></span>
                             </template>
+                            <span x-show="task.value_score > 0"
+                                  class="rounded-full px-1.5 py-0.5 font-mono font-semibold shrink-0"
+                                  :style="'font-size:10px;background:' + scoreBadgeBg(task.value_score) + ';color:' + scoreBadgeColor(task.value_score) + ';'"
+                                  x-text="'VS·' + task.value_score"></span>
                             <span class="shrink-0" @click.stop>
                                 <span x-data="tbcbPill(task)" class="relative inline-flex">
                                     <button @click="open = !open"
@@ -593,6 +677,54 @@
                                     </div>
                                 </span>
                             </span>
+                        </div>
+                        {{-- Mobile: 3-row card --}}
+                        <div class="md:hidden px-3 py-3 bg-white relative transition-all cursor-pointer active:bg-slate-50"
+                             :style="(task.is_rolled_over ? 'border-left:3px solid #f59e0b;' : '') + (task.status === 'done' ? 'opacity:0.4;' : '')"
+                             @click="openTaskAction(task)">
+                            {{-- Row 1: Drag, Status pill, VS pill, Rollover pill, Priority --}}
+                            <div class="flex items-center gap-2 mb-2">
+                                <div class="drag-handle cursor-grab text-slate-300 shrink-0 touch-none" @click.stop>
+                                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+                                </div>
+                                <span class="px-3 py-1 rounded-full text-[11px] font-bold shrink-0"
+                                      :style="'background:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).bg + ';color:' + (STATUS_CONFIG[task.status]||STATUS_CONFIG.backlog).color"
+                                      x-text="task.status === 'wip' ? 'WIP' : (task.status === 'done' ? 'Done' : (task.status === 'deferred' ? 'Deferred' : 'Backlog'))"></span>
+                                <span x-show="task.value_score > 0"
+                                      class="px-2.5 py-1 rounded-full font-mono font-bold shrink-0 text-[11px]"
+                                      :style="'background:' + scoreBadgeBg(task.value_score) + ';color:' + scoreBadgeColor(task.value_score) + ';'"
+                                      x-text="'VS·' + task.value_score"></span>
+                                <template x-if="task.is_rolled_over">
+                                    <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 whitespace-nowrap">↩<span x-text="task.rollover_count"></span></span>
+                                </template>
+                                <span class="w-2.5 h-2.5 rounded-full shrink-0 ml-auto" :style="'background:' + priorityColor(task.priority)"></span>
+                            </div>
+                            {{-- Row 2: Full title --}}
+                            <p class="text-[15px] font-semibold text-slate-800 leading-snug pl-6 mb-2"
+                               :class="task.status === 'done' && 'line-through !text-slate-400'" x-text="task.title"></p>
+                            {{-- Row 3: TBCB pill + Pillar --}}
+                            <div class="pl-6 flex items-center gap-2" @click.stop>
+                                <span x-data="tbcbPill(task)" class="relative inline-flex">
+                                    <button @click="open = !open"
+                                            class="px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap inline-flex items-center gap-1.5 border cursor-pointer transition-all"
+                                            :class="task.due_date ? (isOverdue(task.due_date) ? 'bg-red-50 text-red-600 border-red-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200') : 'bg-slate-100 text-slate-400 border-slate-200'">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                        <span x-text="task.due_date ? 'TBCB ' + fmtDate(task.due_date) : 'TBCB'"></span>
+                                    </button>
+                                    <div x-show="open" x-cloak @click.outside="open = false"
+                                         class="absolute left-0 top-8 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-2.5" style="min-width: 160px;">
+                                        <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-0.5">Complete by</p>
+                                        <input type="date" :value="task.due_date ? task.due_date.substring(0,10) : ''"
+                                               class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 outline-none"
+                                               @change="setTbcb(task, $event.target.value)">
+                                        <button x-show="task.due_date" @click="setTbcb(task, null)"
+                                                class="w-full mt-1.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-600 text-[10px] font-semibold cursor-pointer">Clear</button>
+                                    </div>
+                                </span>
+                                <template x-if="task.pillar">
+                                    <span class="px-3 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600" x-text="task.pillar"></span>
+                                </template>
+                            </div>
                         </div>
                     </div>
                 </template>
@@ -670,6 +802,87 @@
                         <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                         <span class="text-[12px] font-semibold text-red-600">Delete</span>
                     </button>
+                </div>
+            </div>
+        </div>
+
+        {{-- ═══════════════════════════════════════════════
+             Plan My Day Modal
+        ═══════════════════════════════════════════════ --}}
+        <div x-show="planModalOpen" x-cloak
+             x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+             class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+             style="background: rgba(0,0,0,0.75); backdrop-filter: blur(4px);"
+             @keydown.escape.window="planModalOpen = false" @click="planModalOpen = false">
+            <div x-show="planModalOpen"
+                 x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0"
+                 @click.stop
+                 class="w-full flex flex-col"
+                 style="max-width:720px; max-height:88vh; background: white; border-radius: 20px; box-shadow: 0 25px 60px rgba(0,0,0,0.3); overflow:hidden;">
+                {{-- Header --}}
+                <div class="flex items-center justify-between p-5" style="border-bottom: 1px solid #f1f5f9;">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900">🧠 Your Day Plan</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Sorted by Value Score. Confirm to apply.</p>
+                    </div>
+                    <button @click="planModalOpen = false" class="text-slate-400 hover:text-slate-600 bg-transparent border-0 cursor-pointer text-lg">✕</button>
+                </div>
+                {{-- AI Rationale --}}
+                <div x-show="planRationale" class="px-5 py-3" style="background: #eff6ff; border-bottom: 1px solid #f1f5f9;">
+                    <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">✨ AI Morning Briefing</span>
+                    <p x-text="planRationale" class="text-sm text-slate-700 mt-1 leading-relaxed"></p>
+                </div>
+                {{-- Task list --}}
+                <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-2">
+                    <template x-for="(task, index) in planTasks" :key="task.id">
+                        <div class="flex items-center gap-3 p-3 rounded-xl" style="background: #f8fafc; border: 1px solid #e2e8f0;">
+                            <span class="font-mono font-bold w-6 text-center shrink-0 text-xs text-slate-400" x-text="index + 1"></span>
+                            <span class="rounded-full px-2 py-0.5 font-mono font-semibold shrink-0"
+                                  :style="'font-size:10px;background:' + scoreBadgeBg(task.value_score) + ';color:' + scoreBadgeColor(task.value_score)"
+                                  x-text="'VS·' + task.value_score"></span>
+                            <div class="flex-1 min-w-0">
+                                <span x-text="task.title" class="text-sm font-medium text-slate-800"></span>
+                                <div class="flex gap-2 mt-0.5 flex-wrap">
+                                    <span x-text="task.pillar" class="text-[10px] text-slate-500"></span>
+                                    <span x-show="task.deadline_formatted" x-text="task.deadline_formatted" class="text-[10px] text-amber-600"></span>
+                                </div>
+                            </div>
+                            <div class="shrink-0 text-right" style="font-size:10px; color:#94a3b8; line-height:1.6;">
+                                <div x-text="'Impact: ' + (task.impact_rating * 10)"></div>
+                                <div x-text="'Urgency: ' + task.urgency_score"></div>
+                                <div x-text="'Theme: ' + task.theme_score"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                {{-- Resurface candidates --}}
+                <template x-if="resurfaceCandidates.length > 0">
+                    <div style="border-top: 1px solid #f1f5f9;">
+                        <div class="px-5 pt-4 pb-2">
+                            <h4 class="text-sm font-semibold text-slate-600">💤 Light day — resurface these?</h4>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Deferred or low-priority tasks that can fill your day.</p>
+                        </div>
+                        <div class="px-5 pb-4 flex flex-col gap-2">
+                            <template x-for="task in resurfaceCandidates" :key="task.id">
+                                <label class="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer" style="background: #f8fafc; border: 1px dashed #e2e8f0;">
+                                    <input type="checkbox" :value="task.id" x-model="selectedResurface"
+                                           class="w-4 h-4 rounded" style="accent-color: {{ $hex }};">
+                                    <span x-text="task.title" class="text-sm flex-1"></span>
+                                    <span x-text="task.status === 'deferred' ? '⏭️ Deferred' : '📋 Low VS·' + task.value_score"
+                                          class="text-[10px] text-slate-400"></span>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                {{-- Footer --}}
+                <div class="flex items-center justify-between p-5" style="border-top: 1px solid #f1f5f9;">
+                    <button @click="planModalOpen = false"
+                            class="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200 bg-white cursor-pointer hover:bg-slate-50">Cancel</button>
+                    <button @click="confirmPlan()"
+                            class="px-5 py-2.5 rounded-xl text-xs font-semibold text-white border-0 cursor-pointer hover:shadow-md"
+                            style="background: {{ $hex }};">✅ Confirm Plan →</button>
                 </div>
             </div>
         </div>
@@ -799,6 +1012,21 @@
                                 class="px-5 py-2.5 rounded-xl text-[13px] font-medium border cursor-pointer transition-all"
                                 :style="priority === p ? 'background:' + priorityBg(p) + ';color:#fff;border-color:' + priorityBg(p) + ';box-shadow:0 2px 8px ' + priorityBg(p) + '40;' : 'background:transparent;color:#64748b;border-color:#e5e7eb;'"
                                 x-text="p.charAt(0).toUpperCase() + p.slice(1)"></button>
+                    </template>
+                </div>
+            </div>
+
+            {{-- Impact Rating --}}
+            <div class="mb-5">
+                <label class="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-2.5">Impact Rating</label>
+                <div class="flex gap-1.5 flex-wrap">
+                    <template x-for="[val, dot, label] in [[4,'🔴','Critical'],[3,'🟠','High'],[2,'🟡','Medium'],[1,'🟢','Low'],[0,'⚪','Minimal']]" :key="val">
+                        <button @click="impactRating = val" type="button"
+                                class="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-medium border cursor-pointer transition-all"
+                                :style="impactRating === val ? 'background:#4338ca;color:#fff;border-color:#4338ca;' : 'background:transparent;color:#64748b;border-color:#e5e7eb;'">
+                            <span x-text="dot"></span>
+                            <span x-text="label"></span>
+                        </button>
                     </template>
                 </div>
             </div>
@@ -1130,6 +1358,7 @@
                     headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF},
                     body: JSON.stringify({ status: newStatus })
                 });
+                if (window.DayOSSync) window.DayOSSync.refresh();
             },
 
             async setTaskPriority(task, newPriority) {
@@ -1164,6 +1393,7 @@
                     method: 'POST',
                     headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF},
                 });
+                if (window.DayOSSync) window.DayOSSync.refresh();
             },
 
             async deferTask(task) {
@@ -1174,6 +1404,7 @@
                     method: 'POST',
                     headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF},
                 });
+                if (window.DayOSSync) window.DayOSSync.refresh();
             },
 
             async deleteTask(task) {
@@ -1184,6 +1415,7 @@
                     method: 'DELETE',
                     headers: {'Content-Type':'application/json','X-CSRF-TOKEN': CSRF},
                 });
+                if (window.DayOSSync) window.DayOSSync.refresh();
             },
 
             updateStats(completedDelta, totalDelta) {
@@ -1196,6 +1428,64 @@
                 sd.pct = sd.total > 0 ? Math.round((sd.completed / sd.total) * 100) : 0;
                 const bar = stats.querySelector('[x-ref="bar"]');
                 if (bar) bar.style.width = sd.pct + '%';
+            },
+
+            scoreBadgeBg(score) {
+                if (score >= 75) return '#a1354422';
+                if (score >= 55) return '#da710122';
+                if (score >= 35) return '#d1990022';
+                return '#7a797422';
+            },
+
+            scoreBadgeColor(score) {
+                if (score >= 75) return '#a13544';
+                if (score >= 55) return '#da7101';
+                if (score >= 35) return '#d19900';
+                return '#7a7974';
+            },
+
+            // Plan My Day state
+            planning: false,
+            planModalOpen: false,
+            planTasks: [],
+            planRationale: '',
+            resurfaceCandidates: [],
+            selectedResurface: [],
+
+            async planDay() {
+                this.planning = true;
+                try {
+                    const res = await fetch('{{ route("admin.api.tasks.plan-day") }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF }
+                    });
+                    const data = await res.json();
+                    this.planTasks = data.tasks || [];
+                    this.planRationale = data.rationale || '';
+                    this.resurfaceCandidates = data.resurface_candidates || [];
+                    this.selectedResurface = [];
+                    this.planModalOpen = true;
+                } catch(e) { console.error(e); }
+                finally { this.planning = false; }
+            },
+
+            async confirmPlan() {
+                const taskOrder = this.planTasks.map(t => t.id);
+                await fetch('{{ route("admin.api.tasks.confirm-plan") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
+                    body: JSON.stringify({ task_order: taskOrder, resurface_task_ids: this.selectedResurface })
+                });
+                this.planModalOpen = false;
+                window.location.reload();
+            },
+
+            async autoSort() {
+                await fetch('{{ route("admin.api.tasks.auto-sort") }}', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': CSRF }
+                });
+                window.location.reload();
             },
 
             addTask(task) {
@@ -1291,6 +1581,7 @@
             open: false,
             title: '',
             priority: 'should',
+            impactRating: 2,
             blockId: '',
             pillar: '',
             minutes: '',
@@ -1337,6 +1628,7 @@
                     daily_plan_id: PLAN_ID,
                     title: this.title.trim(),
                     priority: this.priority,
+                    impact_rating: this.impactRating,
                     pillar: this.pillar || null,
                     task_type: this.taskType,
                 };
@@ -1367,6 +1659,7 @@
                     }
                     this.title = '';
                     this.priority = 'should';
+                    this.impactRating = 2;
                     this.blockId = '';
                     this.pillar = '';
                     this.minutes = '';
@@ -1451,6 +1744,68 @@
     document.addEventListener('dayos:open-add-task', () => {
         const qa = document.querySelector('[x-data="quickAdd()"]');
         if (qa) { Alpine.$data(qa).open = true; }
+    });
+
+    // ─── Sync Indicator Alpine Component ───
+    function syncIndicator() {
+        return {
+            lastSyncedAt: null,
+            syncPulse: false,
+            init() {
+                // Listen for sync events
+                window.addEventListener('dayos:synced', (e) => {
+                    this.lastSyncedAt = new Date().toLocaleTimeString('en-IN', {
+                        hour: '2-digit', minute: '2-digit'
+                    });
+                    this.syncPulse = true;
+                    setTimeout(() => this.syncPulse = false, 2000);
+                });
+            },
+            manualRefresh() {
+                if (window.DayOSSync) window.DayOSSync.refresh();
+            }
+        };
+    }
+</script>
+<script src="/js/dayos-sync.js"></script>
+<script>
+    // ─── DayOS Sync Initialization ───
+    document.addEventListener('DOMContentLoaded', () => {
+        DayOSSync.init((data, meta) => {
+            // Update Alpine taskList state if component is mounted
+            const tl = document.querySelector('[x-data="taskList()"]');
+            if (tl) {
+                const dashboard = Alpine.$data(tl);
+                if (dashboard && data.planned) {
+                    // Rebuild groups from fresh data
+                    const allTasks = [
+                        ...(data.planned || []),
+                        ...(data.floating || []),
+                        ...(data.tbcb || []),
+                    ];
+                    // Re-group by time_block_id
+                    const newGroups = {};
+                    allTasks.forEach(task => {
+                        const key = task.time_block_id ? String(task.time_block_id) : 'anytime';
+                        if (!newGroups[key]) newGroups[key] = [];
+                        newGroups[key].push(task);
+                    });
+                    // Preserve existing block keys
+                    Object.keys(dashboard.groups).forEach(key => {
+                        if (!newGroups[key]) newGroups[key] = [];
+                    });
+                    dashboard.groups = newGroups;
+                }
+            }
+
+            // Dispatch sync event for indicator
+            if (meta.source === 'network') {
+                window.dispatchEvent(new CustomEvent('dayos:synced'));
+            }
+        });
+
+        // Expose globally for task action handlers
+        window.DayOSSync = DayOSSync;
     });
 </script>
 @endpush

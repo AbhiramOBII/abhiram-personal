@@ -96,6 +96,14 @@
                 <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-semibold">Rolled Over</p>
             </div>
             <div class="bg-white border border-slate-200 rounded-xl p-4 text-center">
+                <p class="text-2xl font-bold tracking-tight text-indigo-600">{{ $stats['avg_vs_completed'] ?? 0 }}</p>
+                <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-semibold">Avg VS Completed</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-xl p-4 text-center">
+                <p class="text-2xl font-bold tracking-tight text-amber-500">{{ $stats['resurfaced_count'] ?? 0 }}</p>
+                <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-semibold">Resurfaced Tasks</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-xl p-4 text-center">
                 <div class="flex items-center justify-center gap-1">
                     @for($i = 1; $i <= 10; $i++)
                         <button

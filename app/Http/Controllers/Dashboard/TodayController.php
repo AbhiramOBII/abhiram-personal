@@ -34,7 +34,29 @@ class TodayController extends Controller
             ? $workingDay->timeBlocks()->orderBy('sort_order')->orderBy('start_time')->get()
             : collect();
 
-        $tasks = $plan->tasks()->orderBy('sort_order')->get();
+        // Recalculate stale value scores for today's tasks
+        $scorer = app(\App\Services\ValueScoreService::class);
+        $staleTasks = $plan->tasks()->whereIn('status', ['backlog', 'wip'])
+            ->where(function ($q) {
+                $q->whereNull('value_score_calculated_for')
+                  ->orWhere('value_score_calculated_for', '<', today()->toDateString());
+            })->get();
+        foreach ($staleTasks as $staleTask) {
+            $scorer->calculateAndSave($staleTask, today());
+        }
+
+        $tasks = $plan->tasks()->orderByDesc('value_score')->orderBy('sort_order')->get();
+
+        // Also include open tasks with no TBCB date (floating tasks not yet assigned to a plan)
+        $floatingTasks = Task::active()
+            ->whereNull('parent_task_id')
+            ->whereIn('status', ['backlog', 'wip'])
+            ->where('daily_plan_id', '!=', $plan->id)
+            ->whereNull('tbcb_date')
+            ->orderByDesc('value_score')
+            ->get();
+
+        $tasks = $tasks->merge($floatingTasks)->unique('id');
         $visibleTasks = $tasks->where('status', '!=', 'deferred');
 
         $groupedTasks = [];
@@ -106,6 +128,10 @@ class TodayController extends Controller
             ->whereNull('parent_task_id')
             ->whereIn('status', ['backlog', 'wip'])
             ->where('daily_plan_id', '!=', $plan->id)
+            ->where(function ($q) {
+                $q->whereNull('tbcb_date')
+                  ->orWhere('tbcb_date', '<=', today());
+            })
             ->orderByDesc('id')
             ->limit(30)
             ->get(['id', 'title', 'pillar', 'priority', 'estimated_minutes']);

@@ -31,7 +31,13 @@ class TaskController extends Controller
         // Only apply date range for non-project views
         if ($type !== 'project') {
             if ($range === 'week') {
-                $query->whereHas('dailyPlan', fn($q) => $q->whereBetween('plan_date', [now()->startOfWeek(), now()->endOfWeek()]));
+                $weekStart = now()->startOfWeek();
+                $weekEnd = now()->endOfWeek();
+                $query->where(function ($q) use ($weekStart, $weekEnd) {
+                    $q->whereHas('dailyPlan', fn($q2) => $q2->whereBetween('plan_date', [$weekStart, $weekEnd]))
+                      ->orWhereNull('tbcb_date')
+                      ->orWhereBetween('tbcb_date', [$weekStart, $weekEnd]);
+                });
             } elseif ($range === '7days') {
                 $query->whereHas('dailyPlan', fn($q) => $q->where('plan_date', '>=', now()->subDays(7)->toDateString()));
             } elseif ($range === 'month') {
@@ -47,7 +53,11 @@ class TaskController extends Controller
             $query->where('status', $status);
         }
 
-        if ($type === 'project') {
+        $sort = $request->get('sort');
+
+        if ($sort === 'value_score') {
+            $tasks = $query->orderByDesc('value_score')->get();
+        } elseif ($type === 'project') {
             $tasks = $query->orderBy('deadline_at')->get();
         } else {
             $tasks = $query->orderByDesc(

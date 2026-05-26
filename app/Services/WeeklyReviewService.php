@@ -64,6 +64,21 @@ class WeeklyReviewService
             ->map(fn($t) => ['id' => $t->id, 'title' => $t->title, 'rollover_count' => $t->rollover_count])
             ->toArray();
 
+        // Value Score insights
+        $topCompletedTask = Task::where('status', 'done')
+            ->whereIn('daily_plan_id', $planIds)
+            ->orderByDesc('value_score')
+            ->first();
+        $avgVsCompleted = Task::where('status', 'done')
+            ->whereIn('daily_plan_id', $planIds)
+            ->avg('value_score');
+        $avgVsIncomplete = Task::whereIn('status', ['backlog', 'wip'])
+            ->whereIn('daily_plan_id', $planIds)
+            ->avg('value_score');
+        $resurfacedCount = Task::where('is_resurfaced', true)
+            ->whereBetween('resurfaced_on', [$start, $end])
+            ->count();
+
         // Project task stats for the week
         $projectTasksTotal = Task::project()
             ->where('start_date', '<=', $end)
@@ -101,6 +116,11 @@ class WeeklyReviewService
             'project_tasks_total' => $projectTasksTotal,
             'project_tasks_completed' => $projectTasksCompleted,
             'project_tasks_overdue' => $projectTasksOverdue,
+            'avg_vs_completed' => round($avgVsCompleted ?? 0),
+            'avg_vs_incomplete' => round($avgVsIncomplete ?? 0),
+            'top_completed_task' => $topCompletedTask?->title,
+            'top_completed_vs' => $topCompletedTask?->value_score ?? 0,
+            'resurfaced_count' => $resurfacedCount,
         ];
     }
 

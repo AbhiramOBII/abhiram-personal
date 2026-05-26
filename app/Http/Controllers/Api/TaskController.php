@@ -19,6 +19,7 @@ class TaskController extends Controller
             'daily_plan_id' => 'required|exists:daily_plans,id',
             'title' => 'required|string|max:255',
             'priority' => 'sometimes|in:must,should,bonus',
+            'impact_rating' => 'sometimes|integer|min:0|max:4',
             'time_block_id' => 'nullable|exists:time_blocks,id',
             'pillar' => 'nullable|string|max:40',
             'estimated_minutes' => 'nullable|integer|min:0|max:127',
@@ -33,6 +34,8 @@ class TaskController extends Controller
                 ->max('sort_order') + 1;
 
         $task = Task::create($validated);
+
+        app(\App\Services\ValueScoreService::class)->calculateAndSave($task, today());
 
         return response()->json($task->fresh()->toArray(), 201);
     }
@@ -92,6 +95,7 @@ class TaskController extends Controller
         $validated = $request->validate([
             'title' => 'sometimes|string|max:255',
             'priority' => 'sometimes|in:must,should,bonus',
+            'impact_rating' => 'sometimes|integer|min:0|max:4',
             'pillar' => 'nullable|string|max:40',
             'estimated_minutes' => 'nullable|integer|min:0|max:127',
             'time_block_id' => 'nullable|exists:time_blocks,id',
@@ -113,6 +117,11 @@ class TaskController extends Controller
                 'deadline_notified_0d' => false,
             ]);
             DeadlineAlert::where('task_id', $task->id)->delete();
+        }
+
+        // Recalculate value score if impactful fields changed
+        if ($task->wasChanged(['priority', 'impact_rating', 'pillar', 'estimated_minutes', 'deadline_at'])) {
+            app(\App\Services\ValueScoreService::class)->calculateAndSave($task, today());
         }
 
         return response()->json($task->fresh()->toArray());

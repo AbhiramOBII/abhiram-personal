@@ -8,6 +8,8 @@ use App\Http\Controllers\Api\PracticeIconController;
 use App\Http\Controllers\Api\PracticeLogController;
 use App\Http\Controllers\Api\DeadlineAlertController;
 use App\Http\Controllers\Api\TaskController;
+use App\Http\Controllers\Api\TaskPlanController;
+use App\Http\Controllers\Api\TodayDataController as ApiTodayDataController;
 use App\Http\Controllers\Api\UpskillingController as ApiUpskillingController;
 use App\Http\Controllers\Api\AIController as ApiAIController;
 use App\Http\Controllers\Api\DumpController as ApiDumpController;
@@ -116,6 +118,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('api/dump/categorise', [ApiDumpController::class, 'categorise'])->name('api.dump.categorise');
         Route::post('api/dump/confirm', [ApiDumpController::class, 'confirm'])->name('api.dump.confirm');
 
+        // Task Plan API (JSON) — static paths before wildcards
+        Route::post('api/tasks/plan-day', [TaskPlanController::class, 'planDay'])->name('api.tasks.plan-day');
+        Route::post('api/tasks/confirm-plan', [TaskPlanController::class, 'confirmPlan'])->name('api.tasks.confirm-plan');
+        Route::post('api/tasks/auto-sort', [TaskPlanController::class, 'autoSort'])->name('api.tasks.auto-sort');
+        Route::patch('api/tasks/{task}/impact', [TaskPlanController::class, 'updateImpact'])->name('api.tasks.impact');
+
         // Task API (JSON) — static paths first to avoid wildcard conflicts
         Route::post('api/tasks', [TaskController::class, 'store'])->name('api.tasks.store');
         Route::patch('api/tasks/focus/{plan}', [TaskController::class, 'updateFocus'])->name('api.tasks.focus');
@@ -133,6 +141,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('api/tasks/{task}/reassign', [TaskController::class, 'reassign'])->name('api.tasks.reassign');
         Route::patch('api/tasks/{task}/recurring', [TaskController::class, 'setRecurring'])->name('api.tasks.recurring');
         Route::delete('api/tasks/{task}', [TaskController::class, 'destroy'])->name('api.tasks.destroy');
+
+        // DayOS Sync API (JSON)
+        Route::get('api/dashboard/today-data', [ApiTodayDataController::class, 'index'])->name('api.dashboard.today-data');
+        Route::get('api/ping', fn() => response()->json(['ok' => true, 'ts' => now()->toIso8601String()]))->name('api.ping');
 
         // Deadline Alert API (JSON)
         Route::patch('api/deadline-alerts/{alert}/dismiss', [DeadlineAlertController::class, 'dismiss'])->name('api.deadline-alerts.dismiss');

@@ -9,3 +9,6 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('dayos:check-deadlines')->dailyAt('09:00');
+Schedule::command('dayos:recalculate-scores')->dailyAt('00:01');
+Schedule::command('dayos:recalculate-scores')->dailyAt('09:00');
+Schedule::command('dayos:resurface-tasks')->dailyAt('09:05');

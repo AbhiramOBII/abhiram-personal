@@ -37,6 +37,15 @@ class Task extends Model
         'recurring_type',
         'due_date',
         'archived_at',
+        'impact_rating',
+        'value_score',
+        'theme_score',
+        'urgency_score',
+        'efficiency_score',
+        'value_score_calculated_for',
+        'is_resurfaced',
+        'resurfaced_on',
+        'tbcb_date',
     ];
 
     protected function casts(): array
@@ -54,6 +63,15 @@ class Task extends Model
             'deadline_notified_3d' => 'boolean',
             'deadline_notified_1d' => 'boolean',
             'deadline_notified_0d' => 'boolean',
+            'impact_rating' => 'integer',
+            'value_score' => 'integer',
+            'theme_score' => 'integer',
+            'urgency_score' => 'integer',
+            'efficiency_score' => 'integer',
+            'value_score_calculated_for' => 'date',
+            'is_resurfaced' => 'boolean',
+            'resurfaced_on' => 'date',
+            'tbcb_date' => 'date',
         ];
     }
 
@@ -258,6 +276,94 @@ class Task extends Model
     {
         $this->archived_at = now();
         $this->save();
+    }
+
+    // ─── Scopes for DayOS Sync ───
+    public function scopeFloating(Builder $query): Builder
+    {
+        return $query->active()
+            ->whereNull('parent_task_id')
+            ->whereIn('status', ['backlog', 'wip'])
+            ->whereNull('tbcb_date')
+            ->whereNull('daily_plan_id');
+    }
+
+    public function scopeTbcbDueToday(Builder $query): Builder
+    {
+        return $query->active()
+            ->whereNull('parent_task_id')
+            ->whereIn('status', ['backlog', 'wip'])
+            ->whereNotNull('tbcb_date')
+            ->where('tbcb_date', '<=', today());
+    }
+
+    // ─── TBCB Accessors ───
+    public function getTbcbBadgeAttribute(): ?array
+    {
+        if (!$this->tbcb_date) return null;
+        $isOverdue = $this->tbcb_date->isBefore(today());
+        return [
+            'date' => $this->tbcb_date->toDateString(),
+            'formatted' => $this->tbcb_date->format('j M'),
+            'is_overdue' => $isOverdue,
+        ];
+    }
+
+    public function getTbcbFormattedAttribute(): ?string
+    {
+        if (!$this->tbcb_date) return null;
+        return $this->tbcb_date->format('j M');
+    }
+
+    // ─── Value Score Accessors ───
+    public function getImpactLabelAttribute(): string
+    {
+        return match ((int) $this->impact_rating) {
+            4 => 'Critical',
+            3 => 'High',
+            2 => 'Medium',
+            1 => 'Low',
+            0 => 'Minimal',
+            default => 'Medium',
+        };
+    }
+
+    public function getImpactColorAttribute(): string
+    {
+        return match ((int) $this->impact_rating) {
+            4 => '#a13544',
+            3 => '#da7101',
+            2 => '#d19900',
+            1 => '#437a22',
+            0 => '#7a7974',
+            default => '#d19900',
+        };
+    }
+
+    public function getScoreBadgeAttribute(): array
+    {
+        $score = $this->value_score;
+        return [
+            'score' => $score,
+            'tier'  => match (true) {
+                $score >= 75 => 'critical',
+                $score >= 55 => 'high',
+                $score >= 35 => 'medium',
+                default      => 'low',
+            },
+            'color' => match (true) {
+                $score >= 75 => '#a13544',
+                $score >= 55 => '#da7101',
+                $score >= 35 => '#d19900',
+                default      => '#7a7974',
+            },
+            'bg' => match (true) {
+                $score >= 75 => '#a1354422',
+                $score >= 55 => '#da710122',
+                $score >= 35 => '#d1990022',
+                default      => '#7a797422',
+            },
+        ];
     }
 
     public function isOverdue(): bool
