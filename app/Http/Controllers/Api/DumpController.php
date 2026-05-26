@@ -25,6 +25,10 @@ class DumpController extends Controller
 
             return response()->json($tasks);
         } catch (\Exception $e) {
+            \Log::error('Brain Dump categorise failed: ' . $e->getMessage(), [
+                'line_count' => count($request->lines),
+                'trace' => $e->getTraceAsString(),
+            ]);
             return response()->json(['error' => 'AI categorisation failed. Please try again.'], 500);
         }
     }
@@ -57,6 +61,7 @@ class DumpController extends Controller
                 'priority' => $task['priority'] ?? 'should',
                 'tbcb_date' => $tbcbDate,
                 'value_score' => $valueScore,
+                'daily_plan_id' => null,
                 'status' => 'backlog',
                 'is_completed' => false,
                 'rollover_count' => 0,

@@ -45,7 +45,7 @@ return [
     | for a response. By default, the client will time out after 30 seconds.
     */
 
-    'request_timeout' => env('OPENAI_REQUEST_TIMEOUT', 30),
+    'request_timeout' => env('OPENAI_REQUEST_TIMEOUT', 60),
 
     'default_model' => env('OPENAI_DEFAULT_MODEL', 'gpt-4o-mini'),
 ];

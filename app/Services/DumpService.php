@@ -46,7 +46,7 @@ PROMPT;
                 ['role' => 'system', 'content' => $systemPrompt],
                 ['role' => 'user', 'content' => $userPrompt],
             ],
-            'max_tokens' => 2000,
+            'max_tokens' => 4000,
             'temperature' => 0.3,
             'response_format' => ['type' => 'json_object'],
         ]);
