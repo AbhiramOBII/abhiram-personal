@@ -616,10 +616,9 @@
                                     <input type="checkbox" :checked="selectedTasks.length === tasks.length" @change="tasks.forEach(t => t.selected = $event.target.checked)" style="cursor: pointer; accent-color: #7c3aed;">
                                 </th>
                                 <th style="padding: 8px 8px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Task</th>
-                                <th style="padding: 8px 8px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; width: 110px;">Pillar</th>
-                                <th style="padding: 8px 8px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; width: 85px;">Priority</th>
-                                <th style="padding: 8px 8px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; width: 75px;">Day</th>
-                                <th style="padding: 8px 8px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; width: 65px;">Time</th>
+                                <th style="padding: 8px 8px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; width: 120px;">Pillar</th>
+                                <th style="padding: 8px 8px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; width: 130px;">TBCB</th>
+                                <th style="padding: 8px 8px; text-align: center; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; width: 70px;">VS</th>
                                 <th style="padding: 8px 8px; width: 30px;"></th>
                             </tr>
                         </thead>
@@ -650,32 +649,11 @@
                                         </select>
                                     </td>
                                     <td style="padding: 10px 8px; vertical-align: middle;">
-                                        <select x-model="task.priority" style="width: 100%; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px 6px; background: #fff; outline: none; cursor: pointer;" :style="'color:' + priorityColor(task.priority)">
-                                            <option value="must" style="color: #ef4444;">Must</option>
-                                            <option value="should" style="color: #f59e0b;">Should</option>
-                                            <option value="bonus" style="color: #22c55e;">Bonus</option>
-                                        </select>
+                                        <input type="date" x-model="task.tbcb_date" style="width: 100%; font-size: 12px; color: #475569; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px 6px; background: #fff; outline: none; cursor: pointer;">
                                     </td>
-                                    <td style="padding: 10px 8px; vertical-align: middle;">
-                                        <select x-model="task.suggested_day" style="width: 100%; font-size: 12px; color: #475569; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px 6px; background: #fff; outline: none; cursor: pointer;">
-                                            <option value="sunday">Sun</option>
-                                            <option value="monday">Mon</option>
-                                            <option value="tuesday">Tue</option>
-                                            <option value="wednesday">Wed</option>
-                                            <option value="thursday">Thu</option>
-                                            <option value="friday">Fri</option>
-                                            <option value="saturday">Sat</option>
-                                        </select>
-                                    </td>
-                                    <td style="padding: 10px 8px; vertical-align: middle;">
-                                        <select x-model="task.estimated_minutes" style="width: 100%; font-size: 12px; color: #475569; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px 6px; background: #fff; outline: none; cursor: pointer;">
-                                            <option value="15">15m</option>
-                                            <option value="30">30m</option>
-                                            <option value="45">45m</option>
-                                            <option value="60">1h</option>
-                                            <option value="90">1.5h</option>
-                                            <option value="120">2h</option>
-                                        </select>
+                                    <td style="padding: 10px 8px; vertical-align: middle; text-align: center;">
+                                        <input type="number" x-model.number="task.value_score" min="1" max="100" style="width: 55px; font-size: 12px; font-weight: 600; text-align: center; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px 6px; background: #fff; outline: none;"
+                                               :style="'color:' + (task.value_score >= 70 ? '#16a34a' : (task.value_score >= 40 ? '#d97706' : '#dc2626'))">
                                     </td>
                                     <td style="padding: 10px 8px; vertical-align: middle;">
                                         <button @click="tasks.splice(index, 1)" style="background: none; border: none; cursor: pointer; color: #cbd5e1; padding: 2px;" title="Remove">
@@ -710,7 +688,7 @@
                 </div>
                 <div>
                     <h2 style="font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; color: #1e293b; margin: 0;" x-text="createdCount + ' task' + (createdCount !== 1 ? 's' : '') + ' added'"></h2>
-                    <p style="font-size: 13px; color: #94a3b8; margin: 8px 0 0;">They've been assigned to the right days based on your themes.</p>
+                    <p style="font-size: 13px; color: #94a3b8; margin: 8px 0 0;">Tasks saved with TBCB dates and value scores.</p>
                 </div>
                 <div style="display: flex; gap: 10px;">
                     <button @click="reset()" style="padding: 10px 18px; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff; color: #1e293b; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
@@ -813,7 +791,7 @@ function dumpPage() {
                 });
                 if (!res.ok) throw new Error('API error');
                 const data = await res.json();
-                this.tasks = data.map(t => ({ ...t, selected: true, estimated_minutes: String(t.estimated_minutes) }));
+                this.tasks = data.map(t => ({ ...t, selected: true, tbcb_date: t.tbcb_date || '', value_score: t.value_score || 50 }));
                 this.state = 'reviewing';
             } catch (e) {
                 this.state = 'capturing';
@@ -826,8 +804,12 @@ function dumpPage() {
             if (this.selectedTasks.length === 0) return;
             try {
                 const payload = this.selectedTasks.map(t => ({
-                    ...t,
-                    estimated_minutes: parseInt(t.estimated_minutes) || 30
+                    title: t.title,
+                    pillar: t.pillar,
+                    priority: t.priority,
+                    tbcb_date: t.tbcb_date || null,
+                    value_score: t.value_score || null,
+                    notes: t.notes || '',
                 }));
                 const res = await fetch('{{ route("admin.api.dump.confirm") }}', {
                     method: 'POST',

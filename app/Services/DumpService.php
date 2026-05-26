@@ -18,27 +18,22 @@ class DumpService
         $systemPrompt = <<<'PROMPT'
 You are a task categorisation assistant for Abhiram Chandramohan, a founder and entrepreneur based in Bengaluru.
 He runs Obii Kriationz Web LLP (web agency), hosts a podcast called Business Giseness, and is a BNI Highflyer chapter member.
-His 7 day themes are:
-- Sunday: Recovery + Vision
-- Monday: Revenue & Operations
-- Tuesday: Marketing & Funnel
-- Wednesday: Deep Creation
-- Thursday: BNI + Full Networking
-- Friday: Shoot & Media
-- Saturday: Podcast + Community
 His task pillars are: revenue, marketing, creation, networking, learning, recovery, operations, personal
+Today's date is {TODAY}.
 For each task line provided, analyse it and return a JSON object with these exact fields:
 - "title": cleaned task title (fix capitalisation, remove filler words, max 100 chars)
 - "original": the original line exactly as typed
 - "pillar": one of [revenue, marketing, creation, networking, learning, recovery, operations, personal]
 - "priority": one of [must, should, bonus]
-- "suggested_day": day of week as lowercase string [sunday, monday, tuesday, wednesday, thursday, friday, saturday] — pick based on his day themes
-- "estimated_minutes": integer — realistic time estimate, one of [15, 30, 45, 60, 90, 120]
+- "tbcb_date": suggested "To Be Completed By" date in YYYY-MM-DD format. Pick a realistic date based on urgency. If task seems urgent, use today or tomorrow. If it's a routine task, pick 2-3 days out. If it's flexible/low-priority, pick 5-7 days out. Use null if no deadline makes sense.
+- "value_score": integer 1-100 — estimated value/importance score. Critical revenue/client tasks = 70-100. Important operational tasks = 50-70. Nice-to-have tasks = 20-50. Low priority = 1-20.
 - "notes": any additional context extracted from the line, or empty string
 - "confidence": integer 1-10 — how confident you are in the categorisation
 Return ONLY valid JSON in this exact format: { "tasks": [ ...array of task objects... ] }
 No explanation. No markdown. No extra keys.
 PROMPT;
+
+        $systemPrompt = str_replace('{TODAY}', now()->toDateString(), $systemPrompt);
 
         $numbered = collect($filtered)->map(fn($l, $i) => ($i + 1) . '. ' . trim($l))->implode("\n");
         $userPrompt = "Categorise these tasks:\n" . $numbered;
@@ -67,8 +62,8 @@ PROMPT;
                 'original' => $line,
                 'pillar' => 'operations',
                 'priority' => 'should',
-                'suggested_day' => 'monday',
-                'estimated_minutes' => 30,
+                'tbcb_date' => now()->addDays(3)->toDateString(),
+                'value_score' => 50,
                 'confidence' => 1,
                 'notes' => '',
             ])->all();

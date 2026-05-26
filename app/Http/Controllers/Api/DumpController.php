@@ -35,11 +35,6 @@ class DumpController extends Controller
             'tasks' => 'required|array|max:50',
         ]);
 
-        $dayMap = [
-            'sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3,
-            'thursday' => 4, 'friday' => 5, 'saturday' => 6,
-        ];
-
         $created = 0;
 
         foreach ($request->tasks as $task) {
@@ -52,25 +47,16 @@ class DumpController extends Controller
                 continue;
             }
 
-            $targetDay = $dayMap[$task['suggested_day'] ?? 'monday'] ?? 1;
-            $date = Carbon::now()->dayOfWeek === $targetDay
-                ? Carbon::today()
-                : Carbon::now()->next($targetDay);
-
-            $workingDay = WorkingDay::where('day_number', $date->dayOfWeek)->first();
-
-            $dailyPlan = DailyPlan::firstOrCreate(
-                ['plan_date' => $date->toDateString()],
-                ['working_day_id' => $workingDay?->id]
-            );
+            $tbcbDate = !empty($task['tbcb_date']) ? Carbon::parse($task['tbcb_date'])->toDateString() : null;
+            $valueScore = isset($task['value_score']) ? (int) $task['value_score'] : null;
 
             Task::create([
                 'title' => $title,
                 'notes' => $task['notes'] ?? null,
                 'pillar' => $task['pillar'] ?? null,
                 'priority' => $task['priority'] ?? 'should',
-                'estimated_minutes' => $task['estimated_minutes'] ?? 30,
-                'daily_plan_id' => $dailyPlan->id,
+                'tbcb_date' => $tbcbDate,
+                'value_score' => $valueScore,
                 'status' => 'backlog',
                 'is_completed' => false,
                 'rollover_count' => 0,
@@ -82,7 +68,7 @@ class DumpController extends Controller
         return response()->json([
             'success' => true,
             'created' => $created,
-            'message' => $created . ' tasks added to your schedule.',
+            'message' => $created . ' tasks added.',
         ]);
     }
 }
