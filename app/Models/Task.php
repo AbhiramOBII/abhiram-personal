@@ -3,12 +3,15 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Task extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'daily_plan_id',
         'time_block_id',
@@ -279,21 +282,30 @@ class Task extends Model
     }
 
     // ─── Scopes for DayOS Sync ───
-    public function scopeFloating(Builder $query): Builder
+    public function scopeUnplanned(Builder $query): Builder
     {
         return $query->active()
             ->whereNull('parent_task_id')
             ->whereIn('status', ['backlog', 'wip'])
-            ->whereNull('tbcb_date')
-            ->whereNull('daily_plan_id');
+            ->whereNull('tbcb_date');
+    }
+
+    public function scopeFloating(Builder $query): Builder
+    {
+        return $query->unplanned();
+    }
+
+    public function scopePlanned(Builder $query): Builder
+    {
+        return $query->active()
+            ->whereNull('parent_task_id')
+            ->whereIn('status', ['backlog', 'wip'])
+            ->whereNotNull('tbcb_date');
     }
 
     public function scopeTbcbDueToday(Builder $query): Builder
     {
-        return $query->active()
-            ->whereNull('parent_task_id')
-            ->whereIn('status', ['backlog', 'wip'])
-            ->whereNotNull('tbcb_date')
+        return $query->planned()
             ->where('tbcb_date', '<=', today());
     }
 

@@ -13,10 +13,7 @@ class TodayDataController extends Controller
     public function index(): JsonResponse
     {
         $date = today();
-        $plan = DailyPlan::firstOrCreate(
-            ['plan_date' => $date->toDateString()],
-            ['working_day_id' => WorkingDay::where('day_number', $date->dayOfWeek)->first()?->id]
-        );
+        $plan = DailyPlan::today();
 
         $scorer = app(\App\Services\ValueScoreService::class);
 
@@ -37,14 +34,13 @@ class TodayDataController extends Controller
             ->orderByDesc('value_score')
             ->get();
 
-        // Floating — no tbcb_date, no plan
-        $floating = Task::floating()
+        // Unplanned — no tbcb_date
+        $floating = Task::unplanned()
             ->orderByDesc('value_score')
             ->get();
 
-        // TBCB due today
+        // TBCB due today (planned tasks whose tbcb_date <= today)
         $tbcb = Task::tbcbDueToday()
-            ->whereNull('daily_plan_id')
             ->orderBy('tbcb_date')
             ->orderByDesc('value_score')
             ->get();

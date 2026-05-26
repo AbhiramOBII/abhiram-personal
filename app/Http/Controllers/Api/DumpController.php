@@ -52,7 +52,7 @@ class DumpController extends Controller
             }
 
             $tbcbDate = !empty($task['tbcb_date']) ? Carbon::parse($task['tbcb_date'])->toDateString() : null;
-            $valueScore = isset($task['value_score']) ? (int) $task['value_score'] : null;
+            $valueScore = isset($task['value_score']) ? (int) $task['value_score'] : 0;
 
             Task::create([
                 'title' => $title,

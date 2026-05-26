@@ -100,6 +100,7 @@ class TaskController extends Controller
             'estimated_minutes' => 'nullable|integer|min:0|max:127',
             'time_block_id' => 'nullable|exists:time_blocks,id',
             'due_date' => 'nullable|date',
+            'tbcb_date' => 'nullable|date',
             'notes' => 'nullable|string',
             'task_type' => 'sometimes|in:daily,project',
             'start_date' => 'nullable|date',

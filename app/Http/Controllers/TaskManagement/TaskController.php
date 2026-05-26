@@ -19,7 +19,7 @@ class TaskController extends Controller
         $status = $request->get('status');
         $type = $request->get('type');
 
-        $query = Task::active()->whereNull('parent_task_id')->with(['dailyPlan.workingDay', 'subTasks']);
+        $query = Task::active()->whereNull('parent_task_id')->with(['subTasks']);
 
         // Type filter
         if ($type === 'project') {
@@ -34,14 +34,19 @@ class TaskController extends Controller
                 $weekStart = now()->startOfWeek();
                 $weekEnd = now()->endOfWeek();
                 $query->where(function ($q) use ($weekStart, $weekEnd) {
-                    $q->whereHas('dailyPlan', fn($q2) => $q2->whereBetween('plan_date', [$weekStart, $weekEnd]))
-                      ->orWhereNull('tbcb_date')
+                    $q->whereNull('tbcb_date')
                       ->orWhereBetween('tbcb_date', [$weekStart, $weekEnd]);
                 });
             } elseif ($range === '7days') {
-                $query->whereHas('dailyPlan', fn($q) => $q->where('plan_date', '>=', now()->subDays(7)->toDateString()));
+                $query->where(function ($q) {
+                    $q->whereNull('tbcb_date')
+                      ->orWhere('tbcb_date', '>=', now()->subDays(7)->toDateString());
+                });
             } elseif ($range === 'month') {
-                $query->whereHas('dailyPlan', fn($q) => $q->where('plan_date', '>=', now()->startOfMonth()->toDateString()));
+                $query->where(function ($q) {
+                    $q->whereNull('tbcb_date')
+                      ->orWhere('tbcb_date', '>=', now()->startOfMonth()->toDateString());
+                });
             }
         }
 
@@ -60,12 +65,11 @@ class TaskController extends Controller
         } elseif ($type === 'project') {
             $tasks = $query->orderBy('deadline_at')->get();
         } else {
-            $tasks = $query->orderByDesc(
-                DailyPlan::select('plan_date')->whereColumn('daily_plans.id', 'tasks.daily_plan_id')
-            )->get();
+            $tasks = $query->orderByDesc('tbcb_date')->orderByDesc('value_score')->get();
         }
 
-        $grouped = $tasks->groupBy(fn($t) => $t->dailyPlan?->plan_date?->toDateString() ?? 'no-plan');
+        // Group: planned tasks by tbcb_date, unplanned into 'no-plan'
+        $grouped = $tasks->groupBy(fn($t) => $t->tbcb_date ? \Carbon\Carbon::parse($t->tbcb_date)->toDateString() : 'no-plan');
 
         // Kanban data — group all tasks by status
         $kanbanTasks = $tasks->groupBy('status')->map(fn($g) => $g->values()->toArray());

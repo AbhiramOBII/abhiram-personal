@@ -47,12 +47,8 @@ class TodayController extends Controller
 
         $tasks = $plan->tasks()->orderByDesc('value_score')->orderBy('sort_order')->get();
 
-        // Also include open tasks with no TBCB date (floating tasks not yet assigned to a plan)
-        $floatingTasks = Task::active()
-            ->whereNull('parent_task_id')
-            ->whereIn('status', ['backlog', 'wip'])
-            ->where('daily_plan_id', '!=', $plan->id)
-            ->whereNull('tbcb_date')
+        // Also include unplanned tasks (no TBCB date)
+        $floatingTasks = Task::unplanned()
             ->orderByDesc('value_score')
             ->get();
 

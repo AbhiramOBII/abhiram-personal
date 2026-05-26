@@ -531,7 +531,7 @@
                     <span class="inline-flex items-center justify-center min-w-[20px] h-5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5"
                           x-text="(groups['{{ $block->id }}'] || []).filter(t=> t.status !== 'done').length"></span>
                 </div>
-                <div class="task-group bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow min-h-[4px] overflow-hidden" data-block-id="{{ $block->id }}">
+                <div class="task-group bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow min-h-[4px] overflow-visible" data-block-id="{{ $block->id }}">
                     <template x-for="task in sortedGroup('{{ $block->id }}')" :key="task.id">
                         <div class="border-b border-slate-100 last:border-b-0" :data-task-id="task.id" data-task-card>
                             {{-- Desktop: single row --}}
@@ -608,7 +608,7 @@
                                             <span x-text="task.due_date ? 'TBCB ' + fmtDate(task.due_date) : 'TBCB'"></span>
                                         </button>
                                         <div x-show="open" x-cloak @click.outside="open = false"
-                                             class="absolute left-0 top-8 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-2.5" style="min-width: 160px;">
+                                             class="absolute left-0 bottom-8 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-2.5" style="min-width: 160px;">
                                             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-0.5">Complete by</p>
                                             <input type="date" :value="task.due_date ? task.due_date.substring(0,10) : ''"
                                                    class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 outline-none"
@@ -635,7 +635,7 @@
                 <span class="inline-flex items-center justify-center min-w-[20px] h-5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5"
                       x-text="(groups['anytime'] || []).filter(t=> t.status !== 'done').length"></span>
             </div>
-            <div class="task-group bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow min-h-[4px] overflow-hidden" data-block-id="anytime">
+            <div class="task-group bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow min-h-[4px] overflow-visible" data-block-id="anytime">
                 <template x-for="task in sortedGroup('anytime')" :key="task.id">
                     <div class="border-b border-slate-100 last:border-b-0" :data-task-id="task.id" data-task-card>
                         {{-- Desktop: single row --}}
